@@ -1,0 +1,29 @@
+# Dependencies (reinstall with npm install)
+node_modules/
+
+# Secrets and local configuration (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Local database and uploaded student files
+*.sqlite
+*.sqlite3
+backend/data/
+backend/uploads/
+
+# Build output and caches
+backend/dist/
+*.tsbuildinfo
+
+# Python virtual environments
+.venv/
+
+# Editor / OS files
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+
+# Local project documents (not for the public site)
+frontend/public/images/*.docx

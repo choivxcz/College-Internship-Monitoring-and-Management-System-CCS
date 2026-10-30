@@ -1331,3 +1331,22 @@
     transform: none !important;
   }
 }
+
+.document-remarks textarea {
+  display: block;
+  width: 100%;
+  margin: 5px 0;
+  padding: 8px 9px;
+  border: 1px solid #e4e9f2;
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: #4f5c72;
+  font: inherit;
+  font-size: 9px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.document-remarks textarea:disabled {
+  opacity: .65;
+}

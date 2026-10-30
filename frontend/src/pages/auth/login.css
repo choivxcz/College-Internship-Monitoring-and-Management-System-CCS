@@ -2963,3 +2963,62 @@
     display: none;
   }
 }
+
+/* Student sign-up */
+.signup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
+}
+
+.signup-grid .signup-wide {
+  grid-column: 1 / -1;
+}
+
+.signup-form .form-field {
+  margin-bottom: 12px;
+}
+
+.signup-form .notice {
+  margin-bottom: 12px;
+}
+
+.form-field .optional {
+  color: #9aa4b3;
+  font-weight: 400;
+}
+
+.input-wrap select {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #293a54;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mode-switch {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mode-switch:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 520px) {
+  .signup-grid {
+    grid-template-columns: 1fr;
+  }
+}

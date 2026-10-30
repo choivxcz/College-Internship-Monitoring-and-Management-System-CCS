@@ -746,3 +746,21 @@
     transform: none !important;
   }
 }
+
+.application-status-select {
+  padding: 6px 8px;
+  border: 1px solid #dfe6f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #2a4262;
+  font-size: 11px;
+}
+
+.application-status-select:disabled {
+  opacity: .6;
+}
+
+.application-form-field textarea {
+  resize: vertical;
+  min-height: 74px;
+}

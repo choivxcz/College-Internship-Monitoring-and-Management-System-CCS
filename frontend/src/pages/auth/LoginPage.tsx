@@ -13,13 +13,21 @@ import {
   CircleHelp,
   CheckCircle2,
   X,
+  Mail,
+  Phone,
+  BookOpen,
+  UserPlus,
 } from "lucide-react";
+import type { UserDTO } from "../../../../shared/contracts";
+import { api, ApiError, type RegisterInput } from "../../services/api";
 
 type UserRole = "student" | "admin";
 
-type LoginPageProps = { onAdminLogin: () => void };
+type LoginPageProps = { onLogin: (user: UserDTO) => void };
 
-export default function LoginPage({ onAdminLogin }: LoginPageProps) {
+const emptySignUp = { id: "", name: "", email: "", program: "BSIT" as RegisterInput["program"], section: "", phone: "", password: "", confirm: "" };
+
+export default function LoginPage({ onLogin }: LoginPageProps) {
   const [role, setRole] = useState<UserRole>("student");
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
@@ -32,7 +40,10 @@ export default function LoginPage({ onAdminLogin }: LoginPageProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEnteringDashboard, setIsEnteringDashboard] = useState(false);
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [signUp, setSignUp] = useState(emptySignUp);
   const fluidCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -173,7 +184,7 @@ export default function LoginPage({ onAdminLogin }: LoginPageProps) {
     setNoticeType(type);
   }
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!userId.trim() || !password) {
@@ -184,32 +195,77 @@ export default function LoginPage({ onAdminLogin }: LoginPageProps) {
       return;
     }
 
-    /*
-      FRONTEND DEMO ONLY
-
-      This temporarily opens the admin dashboard when the Admin role is
-      selected and the form is filled. It does NOT authenticate the user.
-      Connect this handler to your backend API before real deployment.
-    */
-    if (role === "admin") {
-      setNotice("");
+    setIsSubmitting(true);
+    setNotice("");
+    try {
+      const user = await api.login({
+        userId: userId.trim(),
+        password,
+        role,
+        keepSignedIn,
+      });
       setIsEnteringDashboard(true);
 
-      // Let the ambient transition finish before mounting the dashboard.
+      // Let the ambient transition finish before mounting the workspace.
       window.setTimeout(() => {
-        onAdminLogin();
+        onLogin(user);
       }, 1150);
+    } catch (error) {
+      showMessage(
+        error instanceof ApiError
+          ? error.message
+          : "Sign in failed. Please try again.",
+        "error"
+      );
+      setIsSubmitting(false);
+    }
+  }
 
+  function switchMode(next: "signin" | "signup") {
+    setMode(next);
+    setNotice("");
+    setShowPassword(false);
+    if (next === "signup") setRole("student");
+  }
+
+  const updateSignUp = (field: keyof typeof emptySignUp, value: string) =>
+    setSignUp((current) => ({ ...current, [field]: value }));
+
+  async function handleSignUp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (signUp.password.length < 10) {
+      showMessage("Passwords must have at least 10 characters.", "error");
+      return;
+    }
+    if (signUp.password !== signUp.confirm) {
+      showMessage("The two passwords do not match.", "error");
       return;
     }
 
-    showMessage(
-      "The student login interface is ready, but authentication is not connected yet. Connect your backend API to sign in.",
-      "info"
-    );
+    setIsSubmitting(true);
+    setNotice("");
+    try {
+      const user = await api.register({
+        id: signUp.id.trim(),
+        name: signUp.name.trim(),
+        email: signUp.email.trim(),
+        program: signUp.program,
+        section: signUp.section.trim().toUpperCase(),
+        phone: signUp.phone.trim(),
+        password: signUp.password,
+      });
+      setIsEnteringDashboard(true);
+      window.setTimeout(() => onLogin(user), 1150);
+    } catch (error) {
+      showMessage(
+        error instanceof ApiError ? error.message : "Sign up failed. Please try again.",
+        "error"
+      );
+      setIsSubmitting(false);
+    }
   }
 
-  function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
+  async function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!resetEmail.trim()) {
@@ -217,15 +273,18 @@ export default function LoginPage({ onAdminLogin }: LoginPageProps) {
       return;
     }
 
-    /*
-      Connect this form to a backend password-reset endpoint
-      before sending actual password reset requests.
-    */
-    setForgotOpen(false);
-    showMessage(
-      "Password recovery is not connected yet. Please contact your internship coordinator.",
-      "info"
-    );
+    try {
+      const result = await api.requestPasswordAssistance(resetEmail.trim());
+      setForgotOpen(false);
+      showMessage(result.message, "success");
+    } catch (error) {
+      showMessage(
+        error instanceof ApiError
+          ? error.message
+          : "The request could not be submitted.",
+        "error"
+      );
+    }
   }
 
   return (
@@ -245,7 +304,7 @@ export default function LoginPage({ onAdminLogin }: LoginPageProps) {
             <span className="transition-caption">A better view of every internship milestone.</span>
             <span className="transition-progress"><i /></span>
           </div>
-          <span className="transition-corner-label">COLLEGE INTERNSHIP HUB <span> / </span> ADMIN</span>
+          <span className="transition-corner-label">COLLEGE INTERNSHIP HUB <span> / </span> {role === "admin" ? "ADMIN" : "STUDENT"}</span>
         </div>
       )}
       <canvas ref={fluidCanvasRef} className="fluid-cursor-canvas" aria-hidden="true" />
@@ -356,12 +415,98 @@ export default function LoginPage({ onAdminLogin }: LoginPageProps) {
             Welcome to your college portal
           </div>
 
-          <h1 className="welcome-title">Welcome back</h1>
+          <h1 className="welcome-title">{mode === "signin" ? "Welcome back" : "Create your account"}</h1>
 
           <p className="welcome-description">
-            Choose your role and sign in to your internship workspace.
+            {mode === "signin"
+              ? "Choose your role and sign in to your internship workspace."
+              : "Students can register here to track applications, requirements and hours."}
           </p>
 
+          {mode === "signup" ? (
+          <form className="login-form signup-form" onSubmit={handleSignUp}>
+            <div className="signup-grid">
+              <div className="form-field">
+                <label htmlFor="su-id">Student ID</label>
+                <div className="input-wrap">
+                  <UserRound size={16} />
+                  <input id="su-id" required maxLength={40} pattern="[A-Za-z0-9\-]+" title="Letters, numbers and dashes only" placeholder="e.g., 2024-00123" value={signUp.id} onChange={(e) => updateSignUp("id", e.target.value)} />
+                </div>
+              </div>
+              <div className="form-field">
+                <label htmlFor="su-name">Full name</label>
+                <div className="input-wrap">
+                  <UserRound size={16} />
+                  <input id="su-name" required maxLength={150} autoComplete="name" placeholder="Juan Dela Cruz" value={signUp.name} onChange={(e) => updateSignUp("name", e.target.value)} />
+                </div>
+              </div>
+              <div className="form-field signup-wide">
+                <label htmlFor="su-email">College email</label>
+                <div className="input-wrap">
+                  <Mail size={16} />
+                  <input id="su-email" type="email" required autoComplete="email" placeholder="you@lspu.edu.ph" value={signUp.email} onChange={(e) => updateSignUp("email", e.target.value)} />
+                </div>
+              </div>
+              <div className="form-field">
+                <label htmlFor="su-program">Program</label>
+                <div className="input-wrap">
+                  <BookOpen size={16} />
+                  <select id="su-program" value={signUp.program} onChange={(e) => updateSignUp("program", e.target.value)}>
+                    <option value="BSIT">BSIT</option>
+                    <option value="BSBA">BSBA</option>
+                    <option value="BSHM">BSHM</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-field">
+                <label htmlFor="su-section">Section</label>
+                <div className="input-wrap">
+                  <BookOpen size={16} />
+                  <input id="su-section" required maxLength={30} placeholder="e.g., 4A" value={signUp.section} onChange={(e) => updateSignUp("section", e.target.value)} />
+                </div>
+              </div>
+              <div className="form-field signup-wide">
+                <label htmlFor="su-phone">Mobile number <span className="optional">(optional)</span></label>
+                <div className="input-wrap">
+                  <Phone size={16} />
+                  <input id="su-phone" type="tel" autoComplete="tel" maxLength={40} placeholder="09XX XXX XXXX" value={signUp.phone} onChange={(e) => updateSignUp("phone", e.target.value)} />
+                </div>
+              </div>
+              <div className="form-field">
+                <label htmlFor="su-password">Password</label>
+                <div className="input-wrap">
+                  <LockKeyhole size={16} />
+                  <input id="su-password" type={showPassword ? "text" : "password"} required minLength={10} autoComplete="new-password" placeholder="At least 10 characters" value={signUp.password} onChange={(e) => updateSignUp("password", e.target.value)} />
+                  <button className="password-toggle" type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(!showPassword)}>
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+              <div className="form-field">
+                <label htmlFor="su-confirm">Confirm password</label>
+                <div className="input-wrap">
+                  <LockKeyhole size={16} />
+                  <input id="su-confirm" type={showPassword ? "text" : "password"} required minLength={10} autoComplete="new-password" placeholder="Repeat password" value={signUp.confirm} onChange={(e) => updateSignUp("confirm", e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            {notice && (
+              <div className={`notice notice-${noticeType}`} role="status">
+                {noticeType === "success" ? <CheckCircle2 size={16} /> : <CircleHelp size={16} />}
+                <span>{notice}</span>
+                <button type="button" aria-label="Dismiss message" onClick={() => setNotice("")}>
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            <button className="sign-in-button" type="submit" disabled={isSubmitting || isEnteringDashboard}>
+              <span>{isSubmitting || isEnteringDashboard ? "Creating account…" : "Create student account"}</span>
+              <UserPlus size={17} />
+            </button>
+          </form>
+          ) : (
           <form className="login-form" onSubmit={handleLogin}>
             <fieldset className="role-fieldset">
               <legend>I am signing in as a</legend>
@@ -528,21 +673,35 @@ export default function LoginPage({ onAdminLogin }: LoginPageProps) {
               </button>
             </div>
 
-            <button className="sign-in-button" type="submit">
+            <button className="sign-in-button" type="submit" disabled={isSubmitting || isEnteringDashboard}>
               <span>
-                Sign in as{" "}
-                {role === "student" ? "Student" : "Admin"}
+                {isSubmitting || isEnteringDashboard
+                  ? "Signing in…"
+                  : `Sign in as ${role === "student" ? "Student" : "Admin"}`}
               </span>
               <ArrowRight size={17} />
             </button>
           </form>
+          )}
 
           <div className="login-divider" />
 
           <div className="first-time-note">
-            <p>
-              First time here? Use the account provided by your college.
-            </p>
+            {mode === "signin" ? (
+              <p>
+                New student?{" "}
+                <button className="mode-switch" type="button" onClick={() => switchMode("signup")}>
+                  Create an account
+                </button>
+              </p>
+            ) : (
+              <p>
+                Already have an account?{" "}
+                <button className="mode-switch" type="button" onClick={() => switchMode("signin")}>
+                  Sign in
+                </button>
+              </p>
+            )}
             <p>
               For access assistance, contact your internship coordinator.
             </p>
