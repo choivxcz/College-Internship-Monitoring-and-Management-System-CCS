@@ -27,3 +27,6 @@ Thumbs.db
 
 # Local project documents (not for the public site)
 frontend/public/images/*.docx
+
+# Frontend build output (rebuild with npm run build)
+dist/

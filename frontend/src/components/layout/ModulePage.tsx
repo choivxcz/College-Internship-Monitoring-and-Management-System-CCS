@@ -36,7 +36,7 @@ const moduleDetails: Record<
     ],
     columns: ["Student", "Student ID", "Program", "Status"],
     rows: [
-      ["Karl Sebastian Cuerdo", "2023-0147", "BSIT 4A", "Interning"],
+      ["Paolo Villanueva", "2023-0147", "BSIT 4A", "Interning"],
       ["Janell Tagayun", "2023-0214", "BSIT 4A", "Accepted"],
       ["Marciano Salazar", "2023-0307", "BSIT 4B", "Applying"],
     ],
@@ -51,7 +51,7 @@ const moduleDetails: Record<
     ],
     columns: ["Student", "Organization", "Position", "Status"],
     rows: [
-      ["Karl Sebastian Cuerdo", "BrightPath Technologies", "Software Dev. Intern", "Interning"],
+      ["Paolo Villanueva", "BrightPath Technologies", "Software Dev. Intern", "Interning"],
       ["Janell Tagayun", "Nexa Digital Studio", "Frontend Intern", "Accepted"],
       ["Marciano Salazar", "Orbit Solutions", "QA Intern", "Applying"],
     ],
@@ -66,7 +66,7 @@ const moduleDetails: Record<
     ],
     columns: ["Student", "Requirement", "Submission date", "Status"],
     rows: [
-      ["Karl Sebastian Cuerdo", "Learning agreement", "Oct 10, 2026", "For review"],
+      ["Paolo Villanueva", "Learning agreement", "Oct 10, 2026", "For review"],
       ["Janell Tagayun", "Parent consent", "Oct 11, 2026", "Verified"],
       ["Marciano Salazar", "Medical certificate", "Oct 12, 2026", "Pending"],
     ],
@@ -81,7 +81,7 @@ const moduleDetails: Record<
     ],
     columns: ["Student", "Required hours", "Rendered hours", "Progress"],
     rows: [
-      ["Karl Sebastian Cuerdo", "486", "320", "66%"],
+      ["Paolo Villanueva", "486", "320", "66%"],
       ["Janell Tagayun", "486", "410", "84%"],
       ["Marciano Salazar", "486", "120", "25%"],
     ],
@@ -96,7 +96,7 @@ const moduleDetails: Record<
     ],
     columns: ["Student", "Program", "Evaluation", "Completion"],
     rows: [
-      ["Karl Sebastian Cuerdo", "BSIT 4A", "Pending", "In progress"],
+      ["Paolo Villanueva", "BSIT 4A", "Pending", "In progress"],
       ["Janell Tagayun", "BSIT 4A", "For review", "In progress"],
       ["Christian Mer Cuala", "BSIT 4A", "Completed", "Completed"],
     ],
