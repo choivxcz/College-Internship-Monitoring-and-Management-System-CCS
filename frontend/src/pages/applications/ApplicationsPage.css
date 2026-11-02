@@ -298,6 +298,33 @@
   font-weight: 600;
 }
 
+.application-interview-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid #edf0f6;
+}
+
+.application-interview-row .application-form-field {
+  flex: 1 1 160px;
+}
+
+.application-interview-row button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.application-date-cell small {
+  display: block;
+  margin-top: 3px;
+  color: #6a5fe0;
+  font-size: 9px;
+}
+
 .application-timeline {
   display: flex;
   flex-direction: column;

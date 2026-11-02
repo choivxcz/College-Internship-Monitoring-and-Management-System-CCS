@@ -104,6 +104,7 @@ export type ApplicationInput = {
   position: string;
   appliedOn: string;
   notes?: string;
+  interviewDate?: string;
 };
 
 export type HourInput = {
@@ -117,7 +118,7 @@ export type RegisterInput = {
   id: string;
   name: string;
   email: string;
-  program: "BSIT" | "BSBA" | "BSHM";
+  program: "BSIT" | "BSCS";
   section: string;
   phone?: string;
   password: string;
@@ -165,6 +166,9 @@ export const api = {
     request<ApplicationDTO>("/applications", { method: "POST", body: JSON.stringify(input) }),
   updateApplication: (id: number, status: ApplicationDTO["status"]) =>
     request<ApplicationDTO>(`/applications/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  /** Pass null to clear the interview date. */
+  updateApplicationInterview: (id: number, interviewDate: string | null) =>
+    request<ApplicationDTO>(`/applications/${id}`, { method: "PATCH", body: JSON.stringify({ interviewDate }) }),
 
   documents: (params: { studentId?: string } = {}) =>
     request<DocumentDTO[]>(`/documents${query(params)}`),

@@ -4,7 +4,7 @@
 
 The College Internship Monitoring and Management System (College Internship Hub) is a web-based prototype intended for the internship coordinators of LSPU-SCC. It consolidates the records involved in supervising student internships, namely placements, applications, required documents, and rendered hours, into a single workspace.
 
-The current version is a front-end prototype that operates on sample data. The back-end service (`backend/`) has not yet been implemented, and the sign-in screen is a demonstration that does not perform authentication. All names, organizations, and figures shown in the prototype are fictitious.
+The system includes a React frontend and an Express backend. Local development uses SQLite, so a separate database server is not required.
 
 ![Internship overview](docs/overview.jpg)
 
@@ -35,15 +35,39 @@ The current version is a front-end prototype that operates on sample data. The b
 
 ## Installation and Usage
 
-Node.js 18 or later is required.
+Node.js 22 or later is required.
 
-```bash
+Install dependencies in both applications:
+
+```powershell
+cd backend
+npm install
+Copy-Item .env.example .env
+```
+
+Edit `backend/.env` and set `ADMIN_PASSWORD` to a password with at least 10 characters. Then initialize the database and create the administrator account:
+
+```powershell
+npm run db:migrate
+npm run db:seed
+```
+
+Start the backend in one terminal:
+
+```powershell
+cd backend
+npm run dev
+```
+
+Start the frontend in a second terminal:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-The development server runs at http://localhost:5173. On the sign-in screen, select Admin and enter any ID and password to open the coordinator dashboard.
+Open http://localhost:5173. Select Admin and sign in with the email and password configured in `backend/.env`. The frontend proxies `/api` requests to the backend at http://127.0.0.1:3001.
 
 To type-check and produce a production build in `frontend/dist`:
 
@@ -55,7 +79,7 @@ npm run build
 
 ```
 frontend/   React and TypeScript client (pages, layout, components, styles)
-backend/    Reserved for the server application (not yet implemented)
+backend/    Express API, SQLite/MySQL persistence, migrations, and seed scripts
 docs/       Screenshots used in this document
 ```
 

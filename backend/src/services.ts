@@ -1,7 +1,7 @@
 import type { Transaction } from 'sequelize';
 import { Op } from 'sequelize';
-import { Application, Document, FollowUp, HourEntry, Student } from './db.js';
-import { requirements, internshipStatuses, type StudentDTO, type ApplicationDTO, type DocumentDTO, type HourDTO, type DashboardDTO, type IssueDTO } from '../../shared/contracts.js';
+import { Application, ApplicationEvent, Document, DocumentReview, FollowUp, HourEntry, Student, User } from './db.js';
+import { requirements, internshipStatuses, type StudentDTO, type ApplicationDTO, type ApplicationEventDTO, type DocumentDTO, type DocumentEventDTO, type HourDTO, type DashboardDTO, type IssueDTO } from '../../shared/contracts.js';
 import { HttpError } from './validation.js';
 
 export async function requireStudent(id: string, transaction?: Transaction) {
@@ -37,22 +37,50 @@ export async function studentProfiles(where: Record<string, unknown> = {}): Prom
     };
   });
 }
+async function userNames(ids: unknown[]) {
+  const unique = [...new Set(ids.filter(id => id !== null && id !== undefined))];
+  const users = unique.length ? await User.findAll({ attributes: ['id','name'], where: { id: { [Op.in]: unique } } }) : [];
+  return new Map(users.map(u => [u.get('id'), u.get('name') as string]));
+}
+const iso = (value: unknown) => new Date(value as string).toISOString();
 export async function applicationRows(where: Record<string, unknown> = {}): Promise<ApplicationDTO[]> {
   const records = await Application.findAll({ where, order: [['createdAt','DESC'],['id','DESC']] });
-  const students = await Student.findAll({ attributes: ['id','name','program','section'] });
+  const ids = records.map(r => r.get('id'));
+  const [students, events] = await Promise.all([
+    Student.findAll({ attributes: ['id','name','program','section'] }),
+    ids.length ? ApplicationEvent.findAll({ where: { applicationId: { [Op.in]: ids } }, order: [['createdAt','ASC'],['id','ASC']] }) : [],
+  ]);
+  const names = await userNames(events.map(e => e.get('actorId')));
   return records.map(record => {
     const data = record.toJSON() as ApplicationDTO;
     const student = students.find(s => s.get('id') === data.studentId);
-    return { ...data, name: String(student?.get('name') || ''), program: `${student?.get('program') || ''} ${student?.get('section') || ''}` };
+    const history: ApplicationEventDTO[] = events.filter(e => e.get('applicationId') === data.id).map(e => ({
+      id: e.get('id') as number, action: e.get('action') as ApplicationEventDTO['action'], status: e.get('status') as ApplicationEventDTO['status'],
+      detail: e.get('detail') as string, actor: names.get(e.get('actorId')) || '', at: iso(e.get('createdAt')),
+    }));
+    return { ...data, interviewDate: data.interviewDate || null, history, name: String(student?.get('name') || ''), program: `${student?.get('program') || ''} ${student?.get('section') || ''}` };
   });
 }
 export async function documentRows(where: Record<string, unknown> = {}): Promise<DocumentDTO[]> {
   const [records, students] = await Promise.all([Document.findAll({ where, order: [['createdAt','DESC']] }), Student.findAll({ attributes: ['id','name'] })]);
-  return records.map(d => ({ id: d.get('id') as number, studentId: d.get('studentId') as string,
-    name: String(students.find(s => s.get('id') === d.get('studentId'))?.get('name') || ''),
-    requirement: d.get('requirement') as string, status: d.get('status') as DocumentDTO['status'],
-    originalName: d.get('originalName') as string, submittedAt: new Date(d.get('createdAt') as string).toISOString(), reviewNote: d.get('reviewNote') as string,
-  }));
+  const ids = records.map(d => d.get('id'));
+  const events = ids.length ? await DocumentReview.findAll({ where: { documentId: { [Op.in]: ids } }, order: [['createdAt','ASC'],['id','ASC']] }) : [];
+  const names = await userNames(events.map(e => e.get('actorId')));
+  return records.map(d => {
+    const history: DocumentEventDTO[] = events.filter(e => e.get('documentId') === d.get('id')).map(e => ({
+      id: e.get('id') as number, action: e.get('action') as DocumentEventDTO['action'], originalName: e.get('originalName') as string,
+      note: e.get('note') as string, actor: names.get(e.get('actorId')) || '', at: iso(e.get('createdAt')),
+    }));
+    const status = d.get('status') as DocumentDTO['status'];
+    // The current decision is the latest review event, unless a newer upload is still waiting.
+    const decision = status === 'For review' ? undefined : [...history].reverse().find(e => e.action === status);
+    return { id: d.get('id') as number, studentId: d.get('studentId') as string,
+      name: String(students.find(s => s.get('id') === d.get('studentId'))?.get('name') || ''),
+      requirement: d.get('requirement') as string, status,
+      originalName: d.get('originalName') as string, submittedAt: iso(d.get('createdAt')), reviewNote: d.get('reviewNote') as string,
+      reviewedBy: decision?.actor || '', reviewedAt: decision?.at || null, history,
+    };
+  });
 }
 export async function hourRows(where: Record<string, unknown> = {}): Promise<HourDTO[]> {
   const [records, students] = await Promise.all([HourEntry.findAll({ where, order: [['date','DESC'],['id','DESC']] }), Student.findAll({ attributes: ['id','name'] })]);

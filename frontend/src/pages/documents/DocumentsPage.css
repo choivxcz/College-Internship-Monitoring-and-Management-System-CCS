@@ -1350,3 +1350,9 @@
 .document-remarks textarea:disabled {
   opacity: .65;
 }
+
+.document-history-item small.document-history-note {
+  margin-top: 3px;
+  color: #5d6a82;
+  font-style: italic;
+}

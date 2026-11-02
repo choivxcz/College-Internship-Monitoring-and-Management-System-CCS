@@ -45,6 +45,9 @@ const dateLabel = (value: string) => {
   const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
+/** Date of the latest status decision, if the coordinator has made one. */
+const lastDecision = (application: ApplicationDTO) =>
+  [...application.history].reverse().find((event) => event.action === "Status changed")?.at;
 const errorText = (caught: unknown, fallback: string) => (caught instanceof ApiError ? caught.message : fallback);
 
 export default function StudentPortalPage({ user, onLogout }: StudentPortalProps) {
@@ -278,7 +281,7 @@ export default function StudentPortalPage({ user, onLogout }: StudentPortalProps
 type TabCallbacks = { onSaved: (message: string) => void; onError: (message: string) => void };
 
 function ApplicationsTab({ studentId, applications, onSaved, onError }: TabCallbacks & { studentId: string; applications: ApplicationDTO[] }) {
-  const empty = { organization: "", position: "", appliedOn: todayIso(), notes: "" };
+  const empty = { organization: "", position: "", appliedOn: todayIso(), interviewDate: "", notes: "" };
   const [form, setForm] = useState(empty);
   const [open, setOpen] = useState(applications.length === 0);
   const [saving, setSaving] = useState(false);
@@ -310,6 +313,7 @@ function ApplicationsTab({ studentId, applications, onSaved, onError }: TabCallb
             <label><span>Organization</span><input required maxLength={255} value={form.organization} placeholder="e.g., Acme Software Inc." onChange={(e) => setForm({ ...form, organization: e.target.value })} /></label>
             <label><span>Position</span><input required maxLength={255} value={form.position} placeholder="e.g., IT Support Intern" onChange={(e) => setForm({ ...form, position: e.target.value })} /></label>
             <label><span>Date applied</span><input type="date" required max={todayIso()} value={form.appliedOn} onChange={(e) => setForm({ ...form, appliedOn: e.target.value })} /></label>
+            <label><span>Interview date <em>(optional)</em></span><input type="date" min={form.appliedOn} value={form.interviewDate} onChange={(e) => setForm({ ...form, interviewDate: e.target.value })} /></label>
             <label className="sp-form-wide"><span>Notes <em>(optional)</em></span><textarea maxLength={2000} rows={3} value={form.notes} placeholder="Contact person, interview schedule, etc." onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
             <div className="sp-form-actions">
               {applications.length > 0 && <button type="button" className="sp-button ghost" onClick={() => setOpen(false)}>Cancel</button>}
@@ -323,17 +327,21 @@ function ApplicationsTab({ studentId, applications, onSaved, onError }: TabCallb
         <div className="sp-card-heading"><div><h2>Your applications</h2><p>Every internship application on record.</p></div><span>{applications.length}</span></div>
         <div className="sp-table-wrap">
           <table>
-            <thead><tr><th>Organization</th><th>Position</th><th>Applied</th><th>Status</th></tr></thead>
+            <thead><tr><th>Organization</th><th>Position</th><th>Applied</th><th>Interview</th><th>Status</th></tr></thead>
             <tbody>
               {applications.map((application) => (
                 <tr key={application.id}>
                   <td><strong>{application.organization}</strong><small>{application.notes || "No notes"}</small></td>
                   <td>{application.position}</td>
                   <td>{dateLabel(application.appliedOn)}</td>
-                  <td><span className={statusClass(application.status)}>{application.status}</span></td>
+                  <td>{application.interviewDate ? dateLabel(application.interviewDate) : "—"}</td>
+                  <td>
+                    <span className={statusClass(application.status)}>{application.status}</span>
+                    {lastDecision(application) && <small>since {dateLabel(lastDecision(application)!)}</small>}
+                  </td>
                 </tr>
               ))}
-              {!applications.length && <tr><td colSpan={4} className="sp-empty">No applications recorded yet.</td></tr>}
+              {!applications.length && <tr><td colSpan={5} className="sp-empty">No applications recorded yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -394,6 +402,11 @@ function DocumentsTab({ studentId, requirements, documents, onSaved, onError }: 
                   <small>
                     {doc.originalName} · submitted {dateLabel(doc.submittedAt)}
                     {doc.reviewNote && <em className="sp-review-note">Coordinator note: {doc.reviewNote}</em>}
+                    {doc.history.filter((event) => event.action === "Verified" || event.action === "Rejected").slice(0, -1).reverse().map((event) => (
+                      <em key={event.id} className="sp-review-note sp-review-earlier">
+                        Earlier: {event.action.toLowerCase()} {dateLabel(event.at)}{event.note ? ` · ${event.note}` : ""}
+                      </em>
+                    ))}
                   </small>
                 ) : (
                   <small>Not uploaded yet</small>

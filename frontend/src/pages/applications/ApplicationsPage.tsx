@@ -20,6 +20,7 @@ import { api, ApiError } from "../../services/api";
 import "./ApplicationsPage.css";
 
 type TimelineItem = {
+  id: string;
   title: string;
   detail: string;
   date: string;
@@ -37,6 +38,7 @@ type ApplicationForm = {
   organization: string;
   position: string;
   appliedOn: string;
+  interviewDate: string;
   notes: string;
 };
 
@@ -53,6 +55,14 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime())
     ? value || "—"
     : date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/** Formats an event timestamp with the time, so same-day decisions stay distinguishable. */
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : `${date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}, ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function statusTone(status: ApplicationDTO["status"]) {
@@ -83,10 +93,12 @@ export default function ApplicationsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [historyAnimating, setHistoryAnimating] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState<ApplicationForm>({ studentId: "", organization: "", position: "", appliedOn: todayIso(), notes: "" });
+  const [form, setForm] = useState<ApplicationForm>({ studentId: "", organization: "", position: "", appliedOn: todayIso(), interviewDate: "", notes: "" });
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [interviewDraft, setInterviewDraft] = useState("");
+  const [savingInterview, setSavingInterview] = useState(false);
   const historyTimer = useRef<number | undefined>(undefined);
   const toastTimer = useRef<number | undefined>(undefined);
 
@@ -141,6 +153,7 @@ export default function ApplicationsPage() {
   const selected = applications.find((application) => application.id === selectedId) ?? null;
   const related = selected ? applications.filter((application) => application.studentId === selected.studentId) : [];
   const historyItems = selected ? historyFor(selected, related) : [];
+  useEffect(() => { setInterviewDraft(selected?.interviewDate ?? ""); }, [selected?.id, selected?.interviewDate]);
   const pipeline = (label: string) => summary?.pipeline.find((item) => item.label === label)?.count ?? 0;
 
   function notify(title: string, detail?: string, kind: "success" | "info" = "info") {
@@ -164,7 +177,7 @@ export default function ApplicationsPage() {
 
   function openRecordModal() {
     const firstStudent = students.find((student) => student.status === "Not applied") ?? students[0];
-    setForm({ studentId: firstStudent?.id ?? "", organization: "", position: "", appliedOn: todayIso(), notes: "" });
+    setForm({ studentId: firstStudent?.id ?? "", organization: "", position: "", appliedOn: todayIso(), interviewDate: "", notes: "" });
     setModalOpen(true);
   }
 
@@ -182,6 +195,7 @@ export default function ApplicationsPage() {
         organization: form.organization.trim(),
         position: form.position.trim(),
         appliedOn: form.appliedOn,
+        interviewDate: form.interviewDate,
         notes: form.notes.trim(),
       });
       setModalOpen(false);
@@ -216,6 +230,19 @@ export default function ApplicationsPage() {
     }
   }
 
+  async function saveInterview(application: ApplicationDTO, interviewDate: string | null) {
+    setSavingInterview(true);
+    try {
+      const saved = await api.updateApplicationInterview(application.id, interviewDate);
+      setApplications((current) => current.map((item) => item.id === saved.id ? saved : item));
+      notify(interviewDate ? "Interview date saved" : "Interview date cleared", `${application.name} · ${application.organization}`, "success");
+    } catch (error) {
+      notify("Interview date could not be saved", error instanceof ApiError ? error.message : "Please try again.");
+    } finally {
+      setSavingInterview(false);
+    }
+  }
+
   function exportCSV() {
     const rows = filtered.map((application) => [
       application.name,
@@ -224,11 +251,12 @@ export default function ApplicationsPage() {
       application.organization,
       application.position,
       application.appliedOn,
+      application.interviewDate ?? "",
       application.status,
       application.notes,
     ]);
     const csv = [
-      ["Student", "Student ID", "Program", "Organization", "Position", "Applied on", "Status", "Notes"],
+      ["Student", "Student ID", "Program", "Organization", "Position", "Applied on", "Interview date", "Status", "Notes"],
       ...rows,
     ]
       .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
@@ -294,7 +322,7 @@ export default function ApplicationsPage() {
           </label>
           <label className="application-select">
             <select value={program} onChange={(event) => { setProgram(event.target.value); setPage(1); }} aria-label="Filter by program">
-              <option>All programs</option><option>BSIT</option><option>BSBA</option><option>BSHM</option>
+              <option>All programs</option><option>BSIT</option><option>BSCS</option>
             </select>
             <ChevronDown size={12} />
           </label>
@@ -356,7 +384,10 @@ export default function ApplicationsPage() {
                   </td>
                   <td>{application.organization}</td>
                   <td>{application.position}</td>
-                  <td className="application-date-cell">{formatDate(application.appliedOn)}</td>
+                  <td className="application-date-cell">
+                    {formatDate(application.appliedOn)}
+                    {application.interviewDate && <small>Interview {formatDate(application.interviewDate)}</small>}
+                  </td>
                   <td><span className={`application-pill app-status-${statusTone(application.status)}`}>{application.status}</span></td>
                   <td><span className={`application-pill app-decision-${decisionTone(application.status)}`}>{decisionLabel(application.status)}</span></td>
                   <td onClick={(event) => event.stopPropagation()}>
@@ -405,9 +436,28 @@ export default function ApplicationsPage() {
               Full history <ArrowUpRight size={12} />
             </button>
           </div>
+          {selected && (
+            <form
+              className="application-interview-row"
+              onSubmit={(event) => { event.preventDefault(); if (interviewDraft) void saveInterview(selected, interviewDraft); }}
+            >
+              <label className="application-form-field">
+                <span>Interview date</span>
+                <input type="date" min={selected.appliedOn} value={interviewDraft} onChange={(event) => setInterviewDraft(event.target.value)} disabled={savingInterview} />
+              </label>
+              <button className="application-primary-button" type="submit" disabled={savingInterview || !interviewDraft || interviewDraft === (selected.interviewDate ?? "")}>
+                Save
+              </button>
+              {selected.interviewDate && (
+                <button className="application-cancel-button" type="button" disabled={savingInterview} onClick={() => void saveInterview(selected, null)}>
+                  Clear
+                </button>
+              )}
+            </form>
+          )}
           <ol className="application-timeline">
             {historyItems.map((item) => (
-              <li className="application-timeline-item" key={`${item.title}-${item.date}`}>
+              <li className="application-timeline-item" key={item.id}>
                 <span className={`application-timeline-icon ${item.kind}`}>
                   {item.kind === "success" && <CheckCircle2 size={12} />}
                   {item.kind === "interview" && <Clock3 size={12} />}
@@ -459,6 +509,10 @@ export default function ApplicationsPage() {
                   <span>Date applied *</span>
                   <input required type="date" value={form.appliedOn} onChange={(event) => updateForm("appliedOn", event.target.value)} />
                 </label>
+                <label className="application-form-field">
+                  <span>Interview date</span>
+                  <input type="date" min={form.appliedOn} value={form.interviewDate} onChange={(event) => updateForm("interviewDate", event.target.value)} />
+                </label>
                 <label className="application-form-field application-form-wide">
                   <span>Notes</span>
                   <textarea value={form.notes} onChange={(event) => updateForm("notes", event.target.value)} placeholder="Optional notes for this application" rows={3} />
@@ -491,19 +545,41 @@ function decisionLabel(status: ApplicationDTO["status"]) {
   return "Accepted";
 }
 
+const statusTitles: Record<ApplicationDTO["status"], (organization: string) => string> = {
+  "Not applied": () => "Status reset",
+  Applying: () => "Returned to Applying",
+  Accepted: (organization) => `${organization} offer accepted`,
+  Interning: () => "Internship started",
+  Completed: () => "Internship completed",
+  Rejected: (organization) => `${organization} application rejected`,
+};
+
+/** Builds the timeline from stored events, newest first; each decision shows the date it was recorded. */
 function historyFor(application: ApplicationDTO, related: ApplicationDTO[]): TimelineItem[] {
-  const items: TimelineItem[] = [];
-  const statusItem: TimelineItem =
-    application.status === "Rejected"
-      ? { title: `${application.organization} application rejected`, detail: "The college recorded a negative decision for this application.", date: formatDate(application.appliedOn), kind: "closed" }
-      : application.status === "Applying"
-        ? { title: "Application awaiting review", detail: `${application.organization} · ${application.position}`, date: formatDate(application.appliedOn), kind: "interview" }
-        : application.status === "Completed"
-          ? { title: "Internship completed", detail: `${application.organization} · all completion requirements verified.`, date: formatDate(application.appliedOn), kind: "success" }
-          : { title: `${application.organization} offer accepted`, detail: `${application.name} is recorded as ${application.status.toLowerCase()} with this organization.`, date: formatDate(application.appliedOn), kind: "success" };
-  items.push(statusItem);
-  items.push({ title: `Application submitted to ${application.organization}`, detail: application.position, date: formatDate(application.appliedOn), kind: "submitted" });
-  if (application.notes) items.push({ title: "Application notes", detail: application.notes, date: formatDate(application.appliedOn), kind: "closed" });
-  if (related.length > 1) items.push({ title: "Other applications on record", detail: `${related.length - 1} other application${related.length - 1 === 1 ? "" : "s"} for this student.`, date: formatDate(application.appliedOn), kind: "closed" });
+  const by = (actor: string) => (actor ? ` · recorded by ${actor}` : "");
+  const items: TimelineItem[] = [...application.history].reverse().map((event): TimelineItem => {
+    const id = `event-${event.id}`;
+    if (event.action === "Submitted") {
+      return { id, title: `Application submitted to ${application.organization}`, detail: `${application.position}${by(event.actor)}`, date: formatDate(application.appliedOn), kind: "submitted" };
+    }
+    if (event.action === "Interview scheduled") {
+      return { id, title: `Interview set for ${formatDate(event.detail)}`, detail: `${application.organization}${by(event.actor)}`, date: formatTimestamp(event.at), kind: "interview" };
+    }
+    if (event.action === "Interview cleared") {
+      return { id, title: "Interview date removed", detail: `${event.detail ? `Was ${formatDate(event.detail)}` : application.organization}${by(event.actor)}`, date: formatTimestamp(event.at), kind: "closed" };
+    }
+    return {
+      id,
+      title: statusTitles[event.status](application.organization),
+      detail: `${event.detail}${by(event.actor)}`,
+      date: formatTimestamp(event.at),
+      kind: event.status === "Rejected" ? "closed" : event.status === "Applying" ? "interview" : "success",
+    };
+  });
+  if (!application.history.some((event) => event.action === "Submitted")) {
+    items.push({ id: "submitted", title: `Application submitted to ${application.organization}`, detail: application.position, date: formatDate(application.appliedOn), kind: "submitted" });
+  }
+  if (application.notes) items.push({ id: "notes", title: "Application notes", detail: application.notes, date: formatDate(application.appliedOn), kind: "closed" });
+  if (related.length > 1) items.push({ id: "related", title: "Other applications on record", detail: `${related.length - 1} other application${related.length - 1 === 1 ? "" : "s"} for this student.`, date: formatDate(application.appliedOn), kind: "closed" });
   return items;
 }

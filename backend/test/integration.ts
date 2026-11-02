@@ -69,6 +69,31 @@ test('SQLite API: authentication, authorization and full internship lifecycle', 
       assert.equal((await request(`/applications/${other.data.id}`,'PATCH',{status:'Accepted'})).status,409);
       assert.equal((await request(`/applications/${applicationId}`,'PATCH',{status:'Completed'})).status,409);
     });
+    await t.test('interview dates and dated decision history are kept',async()=>{
+      const bad=await request('/applications','POST',{studentId:profile.id,organization:'Early Host',position:'Intern',appliedOn:'2026-01-05',interviewDate:'2026-01-01'});
+      assert.equal(bad.status,400);
+      const created=await request('/applications','POST',{studentId:profile.id,organization:'History Host',position:'Intern',appliedOn:'2026-01-05',interviewDate:'2026-01-09'});
+      assert.equal(created.status,201,JSON.stringify(created.data));
+      assert.equal(created.data.interviewDate,'2026-01-09');
+      assert.deepEqual(created.data.history.map((e:{action:string})=>e.action),['Submitted','Interview scheduled']);
+      const id=created.data.id;
+      assert.equal((await request(`/applications/${id}`,'PATCH',{interviewDate:'2026-01-02'})).status,400);
+      assert.equal((await request(`/applications/${id}`,'PATCH',{interviewDate:'2026-01-12'},studentCookie)).status,403);
+      const moved=await request(`/applications/${id}`,'PATCH',{interviewDate:'2026-01-12'});
+      assert.equal(moved.status,200);assert.equal(moved.data.interviewDate,'2026-01-12');
+      const rejected=await request(`/applications/${id}`,'PATCH',{status:'Rejected'});
+      assert.equal(rejected.status,200);
+      const history=rejected.data.history as {action:string;status:string;detail:string;actor:string;at:string}[];
+      assert.deepEqual(history.map(e=>e.action),['Submitted','Interview scheduled','Interview scheduled','Status changed']);
+      const decision=history[3];
+      assert.equal(decision.status,'Rejected');assert.equal(decision.detail,'Applying → Rejected');assert.equal(decision.actor,'Test Admin');
+      // The decision carries its own timestamp, not the application date.
+      assert.notEqual(decision.at.slice(0,10),'2026-01-05');
+      // Repeating the same status adds no duplicate event; clearing the interview is recorded.
+      assert.equal((await request(`/applications/${id}`,'PATCH',{status:'Rejected'})).data.history.length,4);
+      const cleared=await request(`/applications/${id}`,'PATCH',{interviewDate:null});
+      assert.equal(cleared.data.interviewDate,null);assert.equal(cleared.data.history.at(-1).action,'Interview cleared');
+    });
     let hourId=0;
     await t.test('hour approval, daily limit and ownership are enforced',async()=>{
       assert.equal((await request('/hours','POST',{studentId:'OTHER',date:'2026-01-01',hours:8,description:'Test'},studentCookie)).status,403);
@@ -89,6 +114,21 @@ test('SQLite API: authentication, authorization and full internship lifecycle', 
         const id=uploaded.data.id;if(!firstDoc)firstDoc=id;
         assert.equal(uploaded.data.storageName,undefined);
         uploadFiles.push((await Document.findByPk(id))!.get('storageName') as string);
+        if(requirement===requirements[0]){
+          // Rejection, resubmission and approval must all stay visible with reviewer, date and remarks.
+          const returned=await request(`/documents/${id}`,'PATCH',{status:'Rejected',reviewNote:'Signature missing'});
+          assert.equal(returned.data.reviewedBy,'Test Admin');assert.ok(returned.data.reviewedAt);
+          const again=new FormData();again.set('studentId',profile.id);again.set('requirement',requirement);again.set('file',new Blob(['%PDF-1.4\nCorrected\n%%EOF'],{type:'application/pdf'}),'corrected.pdf');
+          const resubmitted=await request('/documents','POST',again,studentCookie);
+          assert.equal(resubmitted.status,201);assert.equal(resubmitted.data.status,'For review');assert.equal(resubmitted.data.reviewedBy,'');
+          uploadFiles.push((await Document.findByPk(id))!.get('storageName') as string);
+          const approved=await request(`/documents/${id}`,'PATCH',{status:'Verified',reviewNote:'Corrected copy accepted'});
+          const history=approved.data.history as {action:string;note:string;actor:string;originalName:string}[];
+          assert.deepEqual(history.map(e=>e.action),['Submitted','Rejected','Resubmitted','Verified']);
+          assert.equal(history[1].note,'Signature missing');assert.equal(history[1].actor,'Test Admin');assert.equal(history[1].originalName,'test.pdf');
+          assert.equal(history[3].note,'Corrected copy accepted');assert.equal(history[2].originalName,'corrected.pdf');
+          continue;
+        }
         assert.equal((await request(`/documents/${id}`,'PATCH',{status:'Verified'},studentCookie)).status,403);
         assert.equal((await request(`/documents/${id}`,'PATCH',{status:'Verified'})).status,200);
       }

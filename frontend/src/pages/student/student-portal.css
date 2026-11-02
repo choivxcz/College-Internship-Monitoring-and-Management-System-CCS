@@ -863,3 +863,7 @@
     min-width: 0;
   }
 }
+
+.sp-review-note.sp-review-earlier {
+  color: #7a8599;
+}

@@ -8,6 +8,7 @@ import StudentProfilesPage from "../students/StudentProfilesPage";
 import ApplicationsPage from "../applications/ApplicationsPage";
 import DocumentsPage from "../documents/DocumentsPage";
 import ProgressMonitoringPage from "../progress/ProgressMonitoringPage";
+import MonitoringReportsPage from "../reports/MonitoringReportsPage";
 import type { DashboardDTO, IssueDTO, UserDTO } from "../../../../shared/contracts";
 import { api, ApiError } from "../../services/api";
 
@@ -102,7 +103,7 @@ export default function DashboardPage({ user, onLogout }: DashboardProps){
      </section>
    </div>
 <section className="panel register-panel"><div className="panel-heading register-heading"><div><h2>Application register</h2><p>{data.applications} applications recorded · students may have more than one application</p></div><button className="text-action export-action" onClick={exportCSV}>Export register <Download size={12}/></button></div>
-     <div className="register-filters"><label className="search-field"><Search size={14}/><input value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}} placeholder="Search student or organization"/></label><select aria-label="Filter by program" value={program} onChange={e=>{setProgram(e.target.value);setPage(1)}}><option>All programs</option><option>BSIT</option><option>BSBA</option><option>BSHM</option></select><select aria-label="Filter by status" value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}><option>All statuses</option><option>Applying</option><option>Accepted</option><option>Interning</option><option>Completed</option><option>Rejected</option></select></div>
+     <div className="register-filters"><label className="search-field"><Search size={14}/><input value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}} placeholder="Search student or organization"/></label><select aria-label="Filter by program" value={program} onChange={e=>{setProgram(e.target.value);setPage(1)}}><option>All programs</option><option>BSIT</option><option>BSCS</option></select><select aria-label="Filter by status" value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}><option>All statuses</option><option>Applying</option><option>Accepted</option><option>Interning</option><option>Completed</option><option>Rejected</option></select></div>
      <div className="register-table-wrap"><table className="register-table"><thead><tr><th>Student</th><th>Organization</th><th>Position</th></tr></thead><tbody>{shown.map(r=><tr key={r.id}><td><strong>{r.name}</strong><small>{r.studentId} · {r.program}</small></td><td>{r.organization}<small>Applied {r.appliedOn}</small></td><td><span className="position-cell">{r.position}</span><span className={`status-mini status-${r.status.toLowerCase().replace(/ /g,"-")}`}>{r.status}</span></td></tr>)}{!shown.length&&<tr><td colSpan={3} className="empty-state">No applications match your filters.</td></tr>}</tbody></table></div>
     <div className="register-pagination"><span>Showing {filtered.length?(Math.min(page,pages)-1)*6+1:0}–{Math.min(Math.min(page,pages)*6,filtered.length)} of {filtered.length} applications</span><div><button disabled={page<=1} onClick={()=>setPage(x=>Math.max(1,x-1))}><ChevronLeft size={13}/> Previous</button><span className="page-number">{Math.min(page,pages)}</span><button disabled={page>=pages} onClick={()=>setPage(x=>Math.min(pages,x+1))}>Next <ChevronRight size={13}/></button></div></div>
    </section></div>
@@ -115,6 +116,8 @@ export default function DashboardPage({ user, onLogout }: DashboardProps){
   <DocumentsPage />
   ) : active === "Progress monitoring" ? (
   <ProgressMonitoringPage />
+  ) : active === "Monitoring & reports" ? (
+  <MonitoringReportsPage />
   ) : (
   <ModulePage active={active} />
   )}

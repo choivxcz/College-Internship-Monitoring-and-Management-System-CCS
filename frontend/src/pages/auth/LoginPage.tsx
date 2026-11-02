@@ -453,8 +453,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   <BookOpen size={16} />
                   <select id="su-program" value={signUp.program} onChange={(e) => updateSignUp("program", e.target.value)}>
                     <option value="BSIT">BSIT</option>
-                    <option value="BSBA">BSBA</option>
-                    <option value="BSHM">BSHM</option>
+                    <option value="BSCS">BSCS</option>
                   </select>
                 </div>
               </div>

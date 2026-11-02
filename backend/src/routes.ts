@@ -6,10 +6,10 @@ import multer from 'multer';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { Op } from 'sequelize';
-import { db, runTransaction, User, Session, Student, Application, Document, HourEntry, FollowUp, RecoveryRequest } from './db.js';
+import { db, runTransaction, User, Session, Student, Application, ApplicationEvent, Document, DocumentReview, HourEntry, FollowUp, RecoveryRequest } from './db.js';
 import { authenticate, adminOnly, hashPassword, verifyPassword, tokenHash } from './security.js';
 import { config } from './config.js';
-import { applicationSchema, hourSchema, studentSchema, registerSchema, contactSchema, password, studentId, HttpError } from './validation.js';
+import { applicationSchema, applicationUpdateSchema, hourSchema, studentSchema, registerSchema, contactSchema, password, studentId, HttpError } from './validation.js';
 import { applicationRows, documentRows, hourRows, studentProfiles, dashboard, requireStudent, scope, csvCell } from './services.js';
 import { requirements, type UserDTO } from '../../shared/contracts.js';
 
@@ -131,18 +131,39 @@ api.get('/applications', async (req, res) => {
 });
 api.post('/applications', async (req, res) => {
   const data = applicationSchema.parse(req.body); scope(req.user.role, req.user.studentId, data.studentId);
-  await requireStudent(data.studentId);
-  const record = await Application.create({ ...data, status: 'Applying' });
-  res.status(201).json((await applicationRows({ id: record.get('id') }))[0]);
+  const id = await runTransaction(async transaction => {
+    await requireStudent(data.studentId, transaction);
+    const record = await Application.create({ ...data, interviewDate: data.interviewDate || null, status: 'Applying' }, { transaction });
+    const applicationId = record.get('id');
+    await ApplicationEvent.create({ applicationId, action: 'Submitted', status: 'Applying', detail: '', actorId: req.user.id }, { transaction });
+    if (data.interviewDate) await ApplicationEvent.create({ applicationId, action: 'Interview scheduled', status: 'Applying', detail: data.interviewDate, actorId: req.user.id }, { transaction });
+    return applicationId;
+  });
+  res.status(201).json((await applicationRows({ id }))[0]);
 });
 api.patch('/applications/:id', adminOnly, async (req, res) => {
-  const data = z.object({ status: z.enum(['Applying','Accepted','Interning','Completed','Rejected']) }).parse(req.body);
+  const data = applicationUpdateSchema.parse(req.body);
   await runTransaction(async transaction => {
     const record = await Application.findByPk(String(req.params.id), { transaction });
     if (!record) throw new HttpError(404, 'Application not found.');
     const owner = record.get('studentId') as string;
     const student = await requireStudent(owner, transaction);
-    if (['Accepted','Interning','Completed'].includes(data.status)) {
+    const changes: Record<string, unknown> = {};
+    const events: { action: string; status: string; detail: string }[] = [];
+    const previous = record.get('status') as string;
+    if (data.status && data.status !== previous) {
+      changes.status = data.status;
+      events.push({ action: 'Status changed', status: data.status, detail: `${previous} → ${data.status}` });
+    }
+    if (data.interviewDate !== undefined) {
+      const next = data.interviewDate || null, current = (record.get('interviewDate') as string | null) || null;
+      if (next && next < (record.get('appliedOn') as string)) throw new HttpError(400, 'Interview date cannot be before the application date.');
+      if (next !== current) {
+        changes.interviewDate = next;
+        events.push({ action: next ? 'Interview scheduled' : 'Interview cleared', status: data.status ?? previous, detail: next ?? current ?? '' });
+      }
+    }
+    if (data.status && ['Accepted','Interning','Completed'].includes(data.status)) {
       const other = await Application.findOne({ where: { studentId: owner, id: { [Op.ne]: record.get('id') }, status: { [Op.in]: ['Accepted','Interning','Completed'] } }, transaction });
       if (other) throw new HttpError(409, 'This student already has a current placement. Change that application first.');
     }
@@ -151,7 +172,9 @@ api.patch('/applications/:id', adminOnly, async (req, res) => {
       const verified = await Document.count({ where: { studentId: owner, status: 'Verified' }, distinct: true, col: 'requirement', transaction });
       if (hours < Number(student.get('requiredHours')) || verified < requirements.length) throw new HttpError(409, 'Completion requires all required hours approved and all documents verified.');
     }
-    await record.update(data, { transaction });
+    if (!events.length) return;
+    await record.update(changes, { transaction });
+    for (const event of events) await ApplicationEvent.create({ applicationId: record.get('id'), ...event, actorId: req.user.id }, { transaction });
   });
   res.json((await applicationRows({ id: req.params.id }))[0]);
 });
@@ -178,6 +201,7 @@ api.post('/documents', upload.single('file'), async (req, res) => {
       const values = { ...data, storageName, mimeType: kind[1], originalName: path.basename(file.originalname).slice(0,255), status: 'For review', reviewNote: '', reviewerId: null, createdAt: new Date() };
       if (existing) { oldFile = existing.get('storageName') as string; await existing.update(values, { transaction }); id = existing.get('id'); }
       else id = (await Document.create(values, { transaction })).get('id');
+      await DocumentReview.create({ documentId: id, action: existing ? 'Resubmitted' : 'Submitted', originalName: values.originalName, note: '', actorId: req.user.id }, { transaction });
     });
   } catch (error) { await unlink(path.join(config.uploadDir, storageName)).catch(() => {}); throw error; }
   if (oldFile) await unlink(path.join(config.uploadDir, oldFile)).catch(() => {});
@@ -197,6 +221,7 @@ api.patch('/documents/:id', adminOnly, async (req, res) => {
     await requireStudent(doc.get('studentId') as string, transaction);
     if (data.status === 'Rejected' && await Application.count({ where: { studentId: doc.get('studentId'), status: 'Completed' }, transaction })) throw new HttpError(409, 'Reopen the completed placement before rejecting a requirement.');
     await doc.update({ ...data, reviewerId: req.user.id }, { transaction });
+    await DocumentReview.create({ documentId: doc.get('id'), action: data.status, originalName: doc.get('originalName'), note: data.reviewNote, actorId: req.user.id }, { transaction });
   });
   res.json((await documentRows({ id: req.params.id }))[0]);
 });

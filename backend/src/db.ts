@@ -69,14 +69,32 @@ export const initialSchema: Record<string, ModelAttributes> = {
   follow_ups: { id: pk(), studentId: studentRef(), authorId: ref('users'), note: { type: DataTypes.TEXT, allowNull: false }, ...timestamps() },
   recovery_requests: { id: pk(), userId: ref('users'), resolved: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false }, ...timestamps() },
 };
-function model(table: string) {
-  return db.define<Model>(table, initialSchema[table], { tableName: table });
+// Migration 002: interview dates plus permanent application and document history.
+export const schema002 = {
+  applicationColumns: { interviewDate: { type: DataTypes.DATEONLY, allowNull: true } } as ModelAttributes,
+  tables: {
+    application_events: {
+      id: pk(), applicationId: ref('applications'), action: text(30), status: text(20),
+      detail: { type: DataTypes.TEXT, allowNull: false }, actorId: { ...ref('users'), allowNull: true, onDelete: 'SET NULL' },
+      ...timestamps(),
+    },
+    document_reviews: {
+      id: pk(), documentId: ref('documents'), action: text(20), originalName: text(),
+      note: { type: DataTypes.TEXT, allowNull: false }, actorId: { ...ref('users'), allowNull: true, onDelete: 'SET NULL' },
+      ...timestamps(),
+    },
+  } as Record<string, ModelAttributes>,
+};
+function model(table: string, extra: ModelAttributes = {}) {
+  return db.define<Model>(table, { ...(initialSchema[table] ?? schema002.tables[table]), ...extra }, { tableName: table });
 }
 export const Student = model('students');
 export const User = model('users');
 export const Session = model('sessions');
-export const Application = model('applications');
+export const Application = model('applications', schema002.applicationColumns);
 export const Document = model('documents');
 export const HourEntry = model('hour_entries');
 export const FollowUp = model('follow_ups');
 export const RecoveryRequest = model('recovery_requests');
+export const ApplicationEvent = model('application_events');
+export const DocumentReview = model('document_reviews');

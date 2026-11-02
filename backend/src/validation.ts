@@ -2,7 +2,7 @@ import { z } from 'zod';
 export const text = z.string().trim().max(255);
 export const studentId = z.string().trim().min(1).max(40).regex(/^[A-Za-z0-9-]+$/);
 export const password = z.string().min(10, 'Passwords must have at least 10 characters.').max(128);
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value, 'Enter a valid date.');
+export const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value, 'Enter a valid date.');
 export const studentSchema = z.object({
   id: studentId, name: text.min(1).max(150), email: z.string().trim().email().max(255).transform(v => v.toLowerCase()),
   program: z.enum(['BSIT','BSCS']), section: text.min(1).max(30),
@@ -22,7 +22,15 @@ export const registerSchema = z.object({
 });
 // Fields a student may change on their own profile.
 export const contactSchema = z.object({ phone: text.default(''), address: text.default(''), emergencyName: text.default(''), emergencyPhone: text.default('') });
-export const applicationSchema =z.object({ studentId, organization: text.min(1), position: text.min(1), appliedOn: date, notes: z.string().trim().max(2000).default('') });
+export const applicationSchema = z.object({
+  studentId, organization: text.min(1), position: text.min(1), appliedOn: date, notes: z.string().trim().max(2000).default(''),
+  interviewDate: z.union([date, z.literal('')]).default(''),
+}).refine(v => !v.interviewDate || v.interviewDate >= v.appliedOn, { message: 'Interview date cannot be before the application date.', path: ['interviewDate'] });
+export const applicationStatus = z.enum(['Applying','Accepted','Interning','Completed','Rejected']);
+// Coordinators update the status, the interview date (null clears it), or both.
+export const applicationUpdateSchema = z.object({
+  status: applicationStatus.optional(), interviewDate: z.union([date, z.literal(''), z.null()]).optional(),
+}).refine(v => v.status !== undefined || v.interviewDate !== undefined, 'Provide a status or an interview date.');
 const today = () => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; };
 export const hourSchema = z.object({ studentId, date: date.refine(v => v <= today(), 'Hours cannot be dated in the future.'), hours: z.number().positive().max(24).multipleOf(0.25), description: z.string().trim().min(1).max(2000) });
 export class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }

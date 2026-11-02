@@ -62,6 +62,18 @@ const statusTones: Record<DocumentStatus, string> = {
 const documentStatus = (document: DocumentDTO): DocumentStatus =>
   document.status === "For review" ? "Pending review" : document.status;
 
+const formatTimestamp = (value: string) => {
+  const date = new Date(value);
+  return `${date.toLocaleDateString("en-GB")}, ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+};
+
+const eventTitles: Record<DocumentDTO["history"][number]["action"], string> = {
+  Submitted: "File submitted",
+  Resubmitted: "Corrected file resubmitted",
+  Verified: "Verified",
+  Rejected: "Rejected",
+};
+
 function attentionPhrase(status: DocumentStatus) {
   if (status === "Rejected") return "rejected";
   if (status === "Missing") return "missing";
@@ -247,15 +259,15 @@ export default function DocumentsPage() {
     window.location.href = api.documentDownloadUrl(item.document.id);
   }
 
-  const history = selectedStudent
-    ? [...(selectedStudent.requirements.filter((item) => item.document) as (Requirement & { document: DocumentDTO })[])]
-      .sort((a, b) => b.document.submittedAt.localeCompare(a.document.submittedAt))
-      .slice(0, 5)
-      .map((item) => ({
-        title: `${item.name} ${statusLabels[item.status].toLowerCase()}`,
-        detail: `${item.document.originalName} · ${new Date(item.document.submittedAt).toLocaleDateString("en-GB")}`,
-        tone: (item.status === "Verified" ? "success" : item.status === "Rejected" ? "danger" : "neutral") as HistoryTone,
-      }))
+  // Every upload and decision for the selected requirement, newest first; earlier reviews stay visible.
+  const history = selectedDocument?.document
+    ? [...selectedDocument.document.history].reverse().map((event) => ({
+      id: event.id,
+      title: event.actor && (event.action === "Verified" || event.action === "Rejected") ? `${eventTitles[event.action]} by ${event.actor}` : eventTitles[event.action],
+      detail: `${formatTimestamp(event.at)} · ${event.originalName}`,
+      note: event.note,
+      tone: (event.action === "Verified" ? "success" : event.action === "Rejected" ? "danger" : "neutral") as HistoryTone,
+    }))
     : [];
 
   const primaryLabel = !selectedDocument ? "Select a document"
@@ -328,7 +340,7 @@ export default function DocumentsPage() {
         </label>
         <label className="documents-select-wrap">
           <select value={program} onChange={(event) => setProgram(event.target.value)} aria-label="Filter by program">
-            <option>All programs</option><option>BSIT</option><option>BSBA</option><option>BSHM</option>
+            <option>All programs</option><option>BSIT</option><option>BSCS</option>
           </select>
           <ChevronDown size={12} />
         </label>
@@ -442,8 +454,8 @@ export default function DocumentsPage() {
               </div>
               <div className="document-meta-block">
                 <span>Reviewed by</span>
-                <strong>{selectedDocument?.status === "Verified" || selectedDocument?.status === "Rejected" ? "Internship coordinator" : "Not yet reviewed"}</strong>
-                <small>{selectedDocument?.status === "Verified" || selectedDocument?.status === "Rejected" ? "Decision recorded" : "Reviewer will be assigned automatically"}</small>
+                <strong>{selectedDocument?.document?.reviewedAt ? selectedDocument.document.reviewedBy || "Internship coordinator" : "Not yet reviewed"}</strong>
+                <small>{selectedDocument?.document?.reviewedAt ? `${selectedDocument.status} on ${formatTimestamp(selectedDocument.document.reviewedAt)}` : "Reviewer will be assigned automatically"}</small>
               </div>
 
               <div className="document-remarks">
@@ -487,12 +499,16 @@ export default function DocumentsPage() {
             </section>
 
             <section className="document-panel document-history-card">
-              <div className="document-simple-heading"><h2>Verification history</h2><p>Latest events for {selectedStudent.name.split(/\s+/)[0]}'s requirements</p></div>
+              <div className="document-simple-heading"><h2>Verification history</h2><p>Every upload and decision for {selectedDocument?.name ?? "the selected requirement"}</p></div>
               <ol className="document-history-list">
                 {history.map((event) => (
-                  <li className="document-history-item" key={`${event.title}-${event.detail}`}>
+                  <li className="document-history-item" key={event.id}>
                     <span className={`document-history-icon ${event.tone}`}>{event.tone === "success" ? <CheckCircle2 size={11}/> : event.tone === "danger" ? <CircleX size={11}/> : <Clock3 size={11}/>}</span>
-                    <span><strong>{event.title}</strong><small>{event.detail}</small></span>
+                    <span>
+                      <strong>{event.title}</strong>
+                      <small>{event.detail}</small>
+                      {event.note && <small className="document-history-note">“{event.note}”</small>}
+                    </span>
                   </li>
                 ))}
                 {!history.length && <li className="document-history-item"><span className="document-history-icon neutral"><Clock3 size={11}/></span><span><strong>No document activity yet</strong><small>Uploads and reviews will appear here.</small></span></li>}

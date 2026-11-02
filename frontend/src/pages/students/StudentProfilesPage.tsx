@@ -177,8 +177,8 @@ export default function StudentProfilesPage() {
 
       <div className="student-filter-bar">
         <label className="student-search-box"><Search size={15}/><input value={query} onChange={e=>filterChange(setQuery,e.target.value)} placeholder="Search name or student ID" aria-label="Search name or student ID"/>{query && <button type="button" aria-label="Clear search" onClick={()=>setQuery("")}><X size={14}/></button>}</label>
-        <label className="student-select-wrap"><select value={program} onChange={e=>filterChange(setProgram,e.target.value)} aria-label="Filter by program"><option>All programs</option><option>BSIT</option><option>BSBA</option><option>BSHM</option></select><ChevronDown size={13}/></label>
-        <label className="student-select-wrap"><select value={section} onChange={e=>filterChange(setSection,e.target.value)} aria-label="Filter by section"><option>All sections</option>{["BSIT 4A","BSIT 4B","BSBA 4A","BSBA 4B","BSHM 4B"].map(item=><option key={item}>{item}</option>)}</select><ChevronDown size={13}/></label>
+        <label className="student-select-wrap"><select value={program} onChange={e=>filterChange(setProgram,e.target.value)} aria-label="Filter by program"><option>All programs</option><option>BSIT</option><option>BSCS</option></select><ChevronDown size={13}/></label>
+        <label className="student-select-wrap"><select value={section} onChange={e=>filterChange(setSection,e.target.value)} aria-label="Filter by section"><option>All sections</option>{["BSIT 4A","BSIT 4B","BSCS 4A","BSCS 4B"].map(item=><option key={item}>{item}</option>)}</select><ChevronDown size={13}/></label>
         <label className="student-select-wrap student-status-filter"><select value={status} onChange={e=>filterChange(setStatus,e.target.value)} aria-label="Filter by internship status"><option>All internship statuses</option>{["Not applied","Applying","Accepted","Interning","Completed"].map(item=><option key={item}>{item}</option>)}</select><ChevronDown size={13}/></label>
         <span className="student-record-count">{loading ? "Loading…" : `${filtered.length} records`}</span>
       </div>
@@ -227,7 +227,7 @@ export default function StudentProfilesPage() {
         <label className="student-form-field student-form-wide"><span>Full name *</span><input required value={form.name} onChange={e=>update("name",e.target.value)} placeholder="Enter student's full name"/></label>
         <label className="student-form-field"><span>Student ID *</span><input required value={form.id} onChange={e=>update("id",e.target.value)} placeholder="e.g. 2026-0101" disabled={modal==="edit"}/></label>
         <label className="student-form-field"><span>Email address *</span><input type="email" required value={form.email} onChange={e=>update("email",e.target.value)}/></label>
-        <label className="student-form-field"><span>Program</span><select value={form.program} onChange={e=>update("program",e.target.value)}><option>BSIT</option><option>BSBA</option><option>BSHM</option></select></label>
+        <label className="student-form-field"><span>Program</span><select value={form.program} onChange={e=>update("program",e.target.value)}><option>BSIT</option><option>BSCS</option></select></label>
         <label className="student-form-field"><span>Section</span><input required value={form.section} onChange={e=>update("section",e.target.value)}/></label>
         <label className="student-form-field student-form-wide"><span>Academic term</span><input required value={form.term} onChange={e=>update("term",e.target.value)}/></label>
         <label className="student-form-field"><span>Required hours</span><input type="number" min="1" max="2000" required value={form.requiredHours} onChange={e=>update("requiredHours",Number(e.target.value))}/></label>

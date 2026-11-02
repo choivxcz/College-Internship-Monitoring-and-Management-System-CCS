@@ -11,13 +11,30 @@ export interface StudentDTO {
   arrangement: string; supervisor: string; supervisorEmail: string; address: string;
   startDate: string; expectedCompletion: string; verifiedDocuments: number; totalDocuments: number;
 }
+export type ApplicationStatus = InternshipStatus | 'Rejected';
+/** One dated entry in an application's history; entries are never edited or removed. */
+export interface ApplicationEventDTO {
+  id: number; action: 'Submitted' | 'Status changed' | 'Interview scheduled' | 'Interview cleared';
+  /** Application status after this event. */
+  status: ApplicationStatus;
+  /** Status change ("Applying → Accepted") or interview date (YYYY-MM-DD). */
+  detail: string; actor: string; at: string;
+}
 export interface ApplicationDTO {
   id: number; studentId: string; name: string; program: string; organization: string;
-  position: string; status: InternshipStatus | 'Rejected'; notes: string; appliedOn: string;
+  position: string; status: ApplicationStatus; notes: string; appliedOn: string;
+  interviewDate: string | null; history: ApplicationEventDTO[];
+}
+/** One dated upload or review decision for a requirement; earlier entries are kept after resubmission. */
+export interface DocumentEventDTO {
+  id: number; action: 'Submitted' | 'Resubmitted' | 'Verified' | 'Rejected';
+  originalName: string; note: string; actor: string; at: string;
 }
 export interface DocumentDTO {
   id: number; studentId: string; name: string; requirement: string; status: 'For review' | 'Verified' | 'Rejected';
   originalName: string; submittedAt: string; reviewNote: string;
+  /** Reviewer and time of the current decision; empty while the file is waiting for review. */
+  reviewedBy: string; reviewedAt: string | null; history: DocumentEventDTO[];
 }
 export interface HourDTO {
   id: number; studentId: string; name: string; date: string; hours: number; description: string;
