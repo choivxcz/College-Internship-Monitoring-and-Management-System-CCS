@@ -17,7 +17,7 @@ export const api = Router();
 const cookieOptions = { httpOnly: true, secure: config.production, sameSite: 'lax' as const, path: '/api' };
 const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false, message: { message: 'Too many attempts. Try again in 15 minutes.' } });
 api.get('/health', async (_req, res) => { await db.authenticate(); res.json({ status: 'ok', database: 'connected' }); });
-const degrees: Record<string, string> = { BSIT: 'BS Information Technology (BSIT)', BSBA: 'BS Business Administration (BSBA)', BSHM: 'BS Hospitality Management (BSHM)' };
+const degrees: Record<string, string> = { BSIT: 'BS Information Technology (BSIT)', BSCS: 'BS Computer Science (BSCS)' };
 const defaultTerm = '1st semester, AY 2026–2027';
 const userDTO = (user: InstanceType<typeof User>): UserDTO => { const { id, email, name, role, studentId: owner } = user.toJSON() as UserDTO; return { id, email, name, role, studentId: owner }; };
 async function startSession(req: Request, res: Response, userId: number, keepSignedIn: boolean) {

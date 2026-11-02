@@ -5,7 +5,7 @@ export const password = z.string().min(10, 'Passwords must have at least 10 char
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value, 'Enter a valid date.');
 export const studentSchema = z.object({
   id: studentId, name: text.min(1).max(150), email: z.string().trim().email().max(255).transform(v => v.toLowerCase()),
-  program: z.enum(['BSIT','BSBA','BSHM']), section: text.min(1).max(30),
+  program: z.enum(['BSIT','BSCS']), section: text.min(1).max(30),
   requiredHours: z.number().int().min(1).max(2000), term: text.min(1),
   phone: text.default(''), degree: text.default(''), yearSection: text.default(''), course: text.default(''),
   adviser: text.default(''), adviserEmail: z.union([z.string().email(), z.literal('')]).default(''),
@@ -18,7 +18,7 @@ export const studentSchema = z.object({
 // Public self sign-up: only identity and class fields; coordinators fill in the rest later.
 export const registerSchema = z.object({
   id: studentId, name: text.min(1).max(150), email: z.string().trim().email().max(255).transform(v => v.toLowerCase()),
-  program: z.enum(['BSIT','BSBA','BSHM']), section: text.min(1).max(30), phone: text.default(''), password,
+  program: z.enum(['BSIT','BSCS']), section: text.min(1).max(30), phone: text.default(''), password,
 });
 // Fields a student may change on their own profile.
 export const contactSchema = z.object({ phone: text.default(''), address: text.default(''), emergencyName: text.default(''), emergencyPhone: text.default('') });
