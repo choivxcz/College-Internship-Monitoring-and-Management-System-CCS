@@ -182,6 +182,20 @@ export const api = {
   updateDocument: (id: number, input: { status: "Verified" | "Rejected"; reviewNote?: string }) =>
     request<DocumentDTO>(`/documents/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   documentDownloadUrl: (id: number) => `${API_BASE}/documents/${id}/download`,
+  /** Fetches an uploaded file so it can be previewed in the page instead of downloaded. */
+  documentFile: async (id: number) => {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}/documents/${id}/download`, { credentials: "include" });
+    } catch {
+      throw new ApiError("Cannot reach the server. Is the API running?", 0);
+    }
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      throw new ApiError(payload?.message || "The file could not be opened.", response.status);
+    }
+    return response.blob();
+  },
 
   hours: (params: { studentId?: string } = {}) => request<HourDTO[]>(`/hours${query(params)}`),
   createHour: (input: HourInput) =>

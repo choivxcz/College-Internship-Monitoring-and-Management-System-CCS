@@ -1,12 +1,16 @@
 import { z } from 'zod';
+import { parseTerm, formatTerm } from '../../shared/contracts.js';
 export const text = z.string().trim().max(255);
 export const studentId = z.string().trim().min(1).max(40).regex(/^[A-Za-z0-9-]+$/);
 export const password = z.string().min(10, 'Passwords must have at least 10 characters.').max(128);
 export const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value, 'Enter a valid date.');
+// Only the 1st and 2nd semester are valid internship terms.
+export const semesterTerm = text.refine(v => parseTerm(v) !== null, 'Choose the 1st or 2nd semester and an academic year.')
+  .transform(v => { const t = parseTerm(v)!; return formatTerm(t.semester, t.startYear); });
 export const studentSchema = z.object({
   id: studentId, name: text.min(1).max(150), email: z.string().trim().email().max(255).transform(v => v.toLowerCase()),
   program: z.enum(['BSIT','BSCS']), section: text.min(1).max(30),
-  requiredHours: z.number().int().min(1).max(2000), term: text.min(1),
+  requiredHours: z.number().int().min(1).max(2000), term: semesterTerm,
   phone: text.default(''), degree: text.default(''), yearSection: text.default(''), course: text.default(''),
   adviser: text.default(''), adviserEmail: z.union([z.string().email(), z.literal('')]).default(''),
   emergencyName: text.default(''), emergencyPhone: text.default(''), organizationType: text.default(''),

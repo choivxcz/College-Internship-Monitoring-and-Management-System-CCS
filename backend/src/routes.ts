@@ -11,7 +11,7 @@ import { authenticate, adminOnly, hashPassword, verifyPassword, tokenHash } from
 import { config } from './config.js';
 import { applicationSchema, applicationUpdateSchema, hourSchema, studentSchema, registerSchema, contactSchema, password, studentId, HttpError } from './validation.js';
 import { applicationRows, documentRows, hourRows, studentProfiles, dashboard, requireStudent, scope, csvCell } from './services.js';
-import { requirements, type UserDTO } from '../../shared/contracts.js';
+import { requirements, parseTerm, formatTerm, semesters, type UserDTO } from '../../shared/contracts.js';
 
 export const api = Router();
 const cookieOptions = { httpOnly: true, secure: config.production, sameSite: 'lax' as const, path: '/api' };
@@ -44,7 +44,7 @@ api.post('/auth/register', authLimit, async (req, res) => {
   // New students join the most recently used term; coordinators can correct it later.
   const latest = await Student.findOne({ attributes: ['term'], order: [['createdAt','DESC']] });
   const user = await runTransaction(async transaction => {
-    await Student.create({ ...profile, degree: degrees[profile.program], term: (latest?.get('term') as string) || defaultTerm, requiredHours: 480 }, { transaction });
+    await Student.create({ ...profile, degree: degrees[profile.program], term: parseTerm((latest?.get('term') as string) || '') ? latest!.get('term') as string : defaultTerm, requiredHours: 480 }, { transaction });
     return User.create({ email: profile.email, name: profile.name, role: 'student', studentId: profile.id, passwordHash }, { transaction });
   });
   await startSession(req, res, user.get('id') as number, false);
@@ -77,8 +77,14 @@ api.patch('/me/profile', async (req, res) => {
   res.json((await studentProfiles({ id: req.user.studentId }))[0]);
 });
 api.get('/terms', async (_req, res) => {
-  const records = await Student.findAll({ attributes: ['term'], group: ['term'], order: [['term','DESC']] });
-  res.json(records.map(s => s.get('term')));
+  const records = await Student.findAll({ attributes: ['term'], group: ['term'] });
+  // Every academic year in use (plus the current one) offers both the 1st and 2nd semester.
+  // The academic year starts in August.
+  const now = new Date();
+  const years = new Set([now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1]);
+  for (const record of records) { const term = parseTerm(record.get('term') as string); if (term) years.add(term.startYear); }
+  // Newest academic year first; within a year, 2nd semester above 1st.
+  res.json([...years].sort((a, b) => b - a).flatMap(year => [...semesters].reverse().map(semester => formatTerm(semester, year))));
 });
 api.get('/requirements', (_req, res) => { res.json(requirements); });
 api.get('/students', async (req, res) => {

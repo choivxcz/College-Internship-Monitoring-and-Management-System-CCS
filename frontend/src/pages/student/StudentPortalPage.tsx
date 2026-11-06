@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
-  ArrowDownToLine,
+  Eye,
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
@@ -21,6 +21,7 @@ import {
 import type { ApplicationDTO, DocumentDTO, HourDTO, StudentDTO, UserDTO } from "../../../../shared/contracts";
 import { api, ApiError } from "../../services/api";
 import "./student-portal.css";
+import FilePreviewModal from "../../components/ui/FilePreviewModal";
 
 type StudentPortalProps = { user: UserDTO; onLogout: () => void | Promise<void> };
 type Tab = "overview" | "applications" | "documents" | "hours" | "profile";
@@ -354,6 +355,7 @@ function DocumentsTab({ studentId, requirements, documents, onSaved, onError }: 
   const inputRef = useRef<HTMLInputElement>(null);
   const [target, setTarget] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [preview, setPreview] = useState<DocumentDTO | null>(null);
 
   function choose(requirement: string) {
     setTarget(requirement);
@@ -414,7 +416,7 @@ function DocumentsTab({ studentId, requirements, documents, onSaved, onError }: 
               </div>
               <span className={statusClass(doc?.status ?? "Missing")}>{doc?.status ?? "Missing"}</span>
               <div className="sp-req-actions">
-                {doc && <a className="sp-download" href={api.documentDownloadUrl(doc.id)}><ArrowDownToLine size={13} /> Open</a>}
+                {doc && <button type="button" className="sp-download" onClick={() => setPreview(doc)}><Eye size={13} /> Open</button>}
                 {doc?.status !== "Verified" && (
                   <button type="button" className="sp-button small" disabled={uploading !== null} onClick={() => choose(requirement)}>
                     <Upload size={13} /> {busy ? "Uploading…" : doc ? "Replace" : "Upload"}
@@ -426,6 +428,7 @@ function DocumentsTab({ studentId, requirements, documents, onSaved, onError }: 
         })}
         {!requirements.length && <li className="sp-empty">Requirements list is unavailable.</li>}
       </ul>
+      {preview && <FilePreviewModal documentId={preview.id} fileName={preview.originalName} title={preview.requirement} onClose={() => setPreview(null)} />}
     </section>
   );
 }

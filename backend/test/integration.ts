@@ -48,7 +48,7 @@ test('SQLite API: authentication, authorization and full internship lifecycle', 
       const cookie=login.headers.get('set-cookie')!; assert.match(cookie,/HttpOnly/i);assert.match(cookie,/Max-Age=/i);adminCookie=cookie.split(';')[0];
       assert.equal((await request('/auth/me')).data.role,'admin');assert.equal(login.data.passwordHash,undefined);
     });
-    const profile={id:'TEST-01',name:'Test Student',email:'student@example.edu',program:'BSIT',section:'4A',term:'Integration term',requiredHours:8,password:'Student-Password123'};
+    const profile={id:'TEST-01',name:'Test Student',email:'student@example.edu',program:'BSIT',section:'4A',term:'1st semester, AY 2030–2031',requiredHours:8,password:'Student-Password123'};
     let applicationId=0;
     await t.test('student creation is atomic and rejects duplicate email',async()=>{
       const created=await request('/students','POST',profile);assert.equal(created.status,201,JSON.stringify(created.data));
@@ -141,14 +141,14 @@ test('SQLite API: authentication, authorization and full internship lifecycle', 
       assert.equal((await request(`/hours/${hourId}`,'PATCH',{status:'Rejected'})).status,409);
       assert.equal((await request(`/documents/${firstDoc}`,'PATCH',{status:'Rejected'})).status,409);
       assert.equal((await request(`/students/${profile.id}`,'PATCH',{...profile,requiredHours:16})).status,409);
-      assert.equal((await request('/dashboard?term=Integration%20term')).data.completed,1);
-      assert.equal((await request('/dashboard?term=Another%20term')).data.students,0);
-      assert.match((await request('/reports/export?term=Integration%20term')).data,/Test Student/);
+      assert.equal((await request(`/dashboard?term=${encodeURIComponent(profile.term)}`)).data.completed,1);
+      assert.equal((await request(`/dashboard?term=${encodeURIComponent('2nd semester, AY 2030–2031')}`)).data.students,0);
+      assert.match((await request(`/reports/export?term=${encodeURIComponent(profile.term)}`)).data,/Test Student/);
       assert.equal((await request('/follow-ups','POST',{studentId:profile.id,note:'Reviewed final progress'})).status,201);
       assert.equal((await request('/follow-ups')).data.length,1);
     });
     await t.test('concurrent placement and hour decisions remain consistent',async()=>{
-      const otherProfile={...profile,id:'RACE-01',email:'race@example.edu',term:'Concurrency term'};
+      const otherProfile={...profile,id:'RACE-01',email:'race@example.edu',term:'2nd semester, AY 2031–2032'};
       assert.equal((await request('/students','POST',otherProfile)).status,201);
       const apps=await Promise.all(['One','Two'].map(organization=>request('/applications','POST',{studentId:otherProfile.id,organization,position:'Intern',appliedOn:'2026-01-01'})));
       const decisions=await Promise.all(apps.map(a=>request(`/applications/${a.data.id}`,'PATCH',{status:'Interning'})));

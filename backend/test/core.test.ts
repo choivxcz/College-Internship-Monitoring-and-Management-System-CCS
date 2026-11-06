@@ -29,9 +29,12 @@ test('hours reject impossible dates, future dates, fractions and excessive hours
   for (const override of [{hours:25},{hours:-1},{hours:0.1},{date:'2026-02-30'},{date:'2099-01-01'}]) assert.equal(hourSchema.safeParse({...valid,...override}).success,false);
 });
 test('student profile requires valid account and academic fields', () => {
-  const valid = { id:'2026-01', name:'Test Student', email:'STUDENT@example.edu', program:'BSIT',section:'4A',term:'Test term',requiredHours:480 };
+  const valid = { id:'2026-01', name:'Test Student', email:'STUDENT@example.edu', program:'BSIT',section:'4A',term:'1st semester, AY 2026–2027',requiredHours:480 };
   assert.equal(studentSchema.parse(valid).email,'student@example.edu');
   assert.equal(studentSchema.safeParse({...valid,requiredHours:0}).success,false);
+  // Only 1st and 2nd semester terms are accepted; a hyphenated year is normalized to an en dash.
+  assert.equal(studentSchema.parse({...valid,term:'2nd semester, AY 2026-2027'}).term,'2nd semester, AY 2026–2027');
+  for (const term of ['Summer, AY 2026–2027','3rd semester, AY 2026–2027','1st semester, AY 2026–2028','Test term']) assert.equal(studentSchema.safeParse({...valid,term}).success,false);
   assert.equal(studentSchema.safeParse({...valid,startDate:'2026-10-20',expectedCompletion:'2026-10-01'}).success,false);
 });
 test('CSV cells escape delimiters, quotes and spreadsheet formulas', () => {

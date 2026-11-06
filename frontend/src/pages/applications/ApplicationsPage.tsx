@@ -18,6 +18,7 @@ import {
 import type { ApplicationDTO, DashboardDTO, StudentDTO } from "../../../../shared/contracts";
 import { api, ApiError } from "../../services/api";
 import "./ApplicationsPage.css";
+import ModalPortal from "../../components/ui/ModalPortal";
 
 type TimelineItem = {
   id: string;
@@ -478,6 +479,7 @@ export default function ApplicationsPage() {
       </p>
 
       {modalOpen && (
+        <ModalPortal>
         <div className="application-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setModalOpen(false); }}>
           <section className="application-modal" role="dialog" aria-modal="true" aria-labelledby="application-modal-title">
             <div className="application-modal-heading">
@@ -526,6 +528,7 @@ export default function ApplicationsPage() {
             </form>
           </section>
         </div>
+        </ModalPortal>
       )}
 
       {toast && (

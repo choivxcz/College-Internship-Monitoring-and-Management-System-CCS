@@ -285,7 +285,12 @@
   flex-shrink: 0;
 }
 
-.student-tab-actions a {
+.student-tab-actions a,
+.student-tab-actions button {
   display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #2e63c9;
+  cursor: pointer;
 }

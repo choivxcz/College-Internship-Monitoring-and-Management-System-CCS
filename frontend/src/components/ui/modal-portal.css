@@ -1,0 +1,3 @@
+/* Dialogs are portaled to <body>; this layer keeps the app's base text styles. */
+.modal-layer { color: #263653; font-size: 13px; }
+body.modal-open { overflow: hidden; }

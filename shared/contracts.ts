@@ -52,3 +52,14 @@ export interface DashboardDTO {
   issues: IssueDTO[]; rows: ApplicationDTO[];
 }
 export const requirements = ['Learning agreement', 'Parent consent', 'Medical certificate', 'Endorsement letter', 'Acceptance letter', 'Learning plan', 'Weekly log', 'Final evaluation'] as const;
+
+/** Internship terms run in the 1st or 2nd semester only; stored as "1st semester, AY 2026–2027". */
+export const semesters = ['1st semester', '2nd semester'] as const;
+export type Semester = typeof semesters[number];
+export const termPattern = /^(1st|2nd) semester, AY (\d{4})[–-](\d{4})$/;
+export function formatTerm(semester: Semester, startYear: number) { return `${semester}, AY ${startYear}–${startYear + 1}`; }
+export function parseTerm(term: string): { semester: Semester; startYear: number } | null {
+  const match = termPattern.exec(term.trim());
+  if (!match || Number(match[3]) !== Number(match[2]) + 1) return null;
+  return { semester: `${match[1]} semester` as Semester, startYear: Number(match[2]) };
+}

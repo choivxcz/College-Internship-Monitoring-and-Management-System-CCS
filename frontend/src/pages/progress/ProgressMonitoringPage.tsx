@@ -12,6 +12,7 @@ import {
 import type { HourDTO, StudentDTO } from "../../../../shared/contracts";
 import { api, ApiError } from "../../services/api";
 import "./ProgressMonitoringPage.css";
+import ModalPortal from "../../components/ui/ModalPortal";
 
 type ToastMessage = { title: string; detail?: string; kind?: "success" | "info" };
 
@@ -342,6 +343,7 @@ export default function ProgressMonitoringPage() {
       )}
 
       {entryOpen && (
+        <ModalPortal>
         <div className="progress-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setEntryOpen(false); }}>
           <section className="progress-modal" role="dialog" aria-modal="true" aria-labelledby="progress-entry-title">
             <div className="progress-modal-heading">
@@ -371,6 +373,7 @@ export default function ProgressMonitoringPage() {
             </form>
           </section>
         </div>
+        </ModalPortal>
       )}
 
       {toast && (

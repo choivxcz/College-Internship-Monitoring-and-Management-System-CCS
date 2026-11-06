@@ -24,6 +24,7 @@ import type { DocumentDTO, StudentDTO } from "../../../../shared/contracts";
 import { requirements as requiredDocuments } from "../../../../shared/contracts";
 import { api, ApiError } from "../../services/api";
 import "./DocumentsPage.css";
+import FilePreviewModal from "../../components/ui/FilePreviewModal";
 
 type DocumentStatus = "Verified" | "Rejected" | "Missing" | "Pending review";
 type HistoryTone = "success" | "danger" | "neutral";
@@ -115,6 +116,7 @@ export default function DocumentsPage() {
   const [remarks, setRemarks] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [preview, setPreview] = useState<Requirement | null>(null);
   const switchTimer = useRef<number | undefined>(undefined);
   const documentSwitchTimer = useRef<number | undefined>(undefined);
   const toastTimer = useRef<number | undefined>(undefined);
@@ -249,6 +251,14 @@ export default function DocumentsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function openPreview(item: Requirement | undefined) {
+    if (!item?.document) {
+      notify("No file available", "This requirement has not been uploaded yet.");
+      return;
+    }
+    setPreview(item);
   }
 
   function download(item: Requirement | undefined) {
@@ -425,7 +435,7 @@ export default function DocumentsPage() {
             <section className="document-panel document-preview-card">
               <div className="document-card-heading">
                 <div><h2>{selectedDocument?.name ?? "No document selected"}</h2><p>Selected document · {selectedStudent.name}</p></div>
-                <button type="button" className="document-open-link" onClick={() => download(selectedDocument)}>Open file <ArrowUpRight size={11}/></button>
+                <button type="button" className="document-open-link" onClick={() => openPreview(selectedDocument)}>Open file <ArrowUpRight size={11}/></button>
               </div>
 
               <div className={`document-banner ${bannerClass}`}>
@@ -437,7 +447,8 @@ export default function DocumentsPage() {
                 <div className="document-file-row">
                   <span className={`document-file-badge ${statusTones[selectedDocument.status]}`}><FileText size={15}/></span>
                   <div><strong>{selectedDocument.document.originalName}</strong><small>Uploaded {new Date(selectedDocument.document.submittedAt).toLocaleDateString("en-GB")}</small></div>
-                  <button type="button" aria-label="Download file" onClick={() => download(selectedDocument)}><Download size={12}/></button>
+                  <button type="button" aria-label="Preview file" title="Preview" onClick={() => openPreview(selectedDocument)}><Eye size={12}/></button>
+                  <button type="button" aria-label="Download file" title="Download" onClick={() => download(selectedDocument)}><Download size={12}/></button>
                 </div>
               ) : (
                 <div className="document-file-empty">
@@ -531,6 +542,7 @@ export default function DocumentsPage() {
           <button aria-label="Dismiss notification" onClick={() => setToast(null)}><X size={14}/></button>
         </div>
       )}
+      {preview?.document && <FilePreviewModal documentId={preview.document.id} fileName={preview.document.originalName} title={`${preview.name} · ${selectedStudent?.name ?? ""}`} onClose={() => setPreview(null)}/>}
     </section>
   );
 }
