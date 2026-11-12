@@ -6,12 +6,12 @@ import multer from 'multer';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { Op } from 'sequelize';
-import { db, runTransaction, User, Session, Student, Application, ApplicationEvent, Document, DocumentReview, HourEntry, FollowUp, RecoveryRequest } from './db.js';
+import { db, runTransaction, User, Session, Student, Application, ApplicationEvent, Document, DocumentReview, HourEntry, FollowUp, RecoveryRequest, AdviserRemark } from './db.js';
 import { authenticate, adminOnly, hashPassword, verifyPassword, tokenHash } from './security.js';
 import { config } from './config.js';
 import { applicationSchema, applicationUpdateSchema, hourSchema, studentSchema, registerSchema, contactSchema, password, studentId, HttpError } from './validation.js';
-import { applicationRows, documentRows, hourRows, studentProfiles, dashboard, requireStudent, scope, csvCell } from './services.js';
-import { requirements, parseTerm, formatTerm, semesters, type UserDTO } from '../../shared/contracts.js';
+import { applicationRows, documentRows, hourRows, adviserRemarkRows, studentProfiles, dashboard, requireStudent, scope, csvCell, localToday } from './services.js';
+import { requirements, parseTerm, formatTerm, semesters, monitoringCategoriesOf, type UserDTO } from '../../shared/contracts.js';
 
 export const api = Router();
 const cookieOptions = { httpOnly: true, secure: config.production, sameSite: 'lax' as const, path: '/api' };
@@ -264,10 +264,22 @@ api.post('/follow-ups', adminOnly, async (req, res) => {
   await requireStudent(data.studentId);
   res.status(201).json(await FollowUp.create({ ...data, authorId: req.user.id }));
 });
+api.get('/adviser-remarks', async (req, res) => { res.json(await adviserRemarkRows(scope(req.user.role, req.user.studentId, queryOwner(req.query.studentId)))); });
+api.post('/adviser-remarks', adminOnly, async (req, res) => {
+  const data = z.object({ studentId, remark: z.string().trim().min(1).max(2000), adviser: z.string().trim().max(150).default('') }).parse(req.body);
+  const student = await requireStudent(data.studentId);
+  // Defaults to the student's assigned adviser, so each remark keeps the adviser who gave it.
+  const adviser = data.adviser || (student.get('adviser') as string);
+  if (!adviser) throw new HttpError(400, 'Assign a faculty adviser to this student, or name the adviser giving the remark.');
+  const record = await AdviserRemark.create({ studentId: data.studentId, adviser, remark: data.remark, authorId: req.user.id });
+  res.status(201).json((await adviserRemarkRows({ id: record.get('id') }))[0]);
+});
 api.get('/dashboard', adminOnly, async (req, res) => { res.json(await dashboard(queryOwner(req.query.term))); });
 api.get('/reports/export', adminOnly, async (req, res) => {
   const data = await studentProfiles(req.query.term ? { term: String(req.query.term) } : {});
-  const csv = [['Student ID','Name','Program','Status','Organization','Approved hours','Required hours','Verified documents','Required documents'], ...data.map(s => [s.id,s.name,s.program,s.status,s.organization,s.hoursDone,s.requiredHours,s.verifiedDocuments,s.totalDocuments])].map(row => row.map(csvCell).join(',')).join('\r\n');
+  const today = localToday();
+  const csv = [['Student ID','Name','Program','Section','Status','Organization','Adviser','Start date','Expected completion','Approved hours','Required hours','Remaining hours','Verified documents','Required documents','Monitoring lists'],
+    ...data.map(s => [s.id,s.name,s.program,s.section,s.status,s.organization,s.adviser,s.startDate,s.expectedCompletion,s.hoursDone,s.requiredHours,Math.max(0,s.requiredHours-s.hoursDone),s.verifiedDocuments,s.totalDocuments,monitoringCategoriesOf(s,today).join('; ')])].map(row => row.map(csvCell).join(',')).join('\r\n');
   res.type('text/csv').attachment('internship-progress.csv').send('\uFEFF' + csv);
 });
 api.get('/admin/recovery-requests', adminOnly, async (_req, res) => {

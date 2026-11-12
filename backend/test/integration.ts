@@ -6,9 +6,13 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 
 // A unique disposable database prevents tests from modifying the application database.
+// SQLite by default; TEST_DB_DIALECT=mysql uses the MySQL server and credentials from backend/.env.
+const dialect = process.env.TEST_DB_DIALECT === 'mysql' ? 'mysql' : 'sqlite';
 const databaseFile = path.join(tmpdir(), `internship_hub_test_${Date.now()}.sqlite`);
-process.env.DB_DIALECT = 'sqlite';
-process.env.DB_STORAGE = databaseFile;
+const mysqlDatabase = `internship_hub_test_${Date.now()}`;
+process.env.DB_DIALECT = dialect;
+if (dialect === 'mysql') process.env.DB_NAME = mysqlDatabase;
+else process.env.DB_STORAGE = databaseFile;
 process.env.NODE_ENV = 'test';
 const { config } = await import('../src/config.js');
 const { db, User, Student, Document } = await import('../src/db.js');
@@ -17,9 +21,18 @@ const { hashPassword } = await import('../src/security.js');
 const { requirements } = await import('../../shared/contracts.js');
 const { app } = await import('../src/app.js');
 
-test('SQLite API: authentication, authorization and full internship lifecycle', async t => {
-  assert.equal(config.dbDialect, 'sqlite');
-  assert.equal(config.dbStorage, databaseFile);
+async function mysqlAdmin(statement: string) {
+  const { default: mysql } = await import('mysql2/promise');
+  const connection = await mysql.createConnection({ host: config.dbHost, port: config.dbPort, user: config.dbUser, password: config.dbPassword });
+  try { await connection.query(statement); } finally { await connection.end(); }
+}
+
+test(`${dialect === 'mysql' ? 'MySQL' : 'SQLite'} API: authentication, authorization and full internship lifecycle`, async t => {
+  assert.equal(config.dbDialect, dialect);
+  if (dialect === 'mysql') {
+    assert.equal(config.database, mysqlDatabase);
+    await mysqlAdmin(`CREATE DATABASE \`${mysqlDatabase}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+  } else assert.equal(config.dbStorage, databaseFile);
   const server = app.listen(0,'127.0.0.1');
   await once(server,'listening');
   const address = server.address();
@@ -35,7 +48,9 @@ test('SQLite API: authentication, authorization and full internship lifecycle', 
   }
   try {
     await migrate(); await migrate();
-    await User.create({name:'Test Admin',email:'admin@example.edu',role:'admin',passwordHash:await hashPassword(adminPassword)});
+    const admin=await User.create({name:'Test Admin',email:'admin@example.edu',role:'admin',passwordHash:await hashPassword(adminPassword)});
+    // Timestamps keep milliseconds on both databases.
+    assert.equal((await User.findByPk(admin.get('id') as number))!.get('createdAt').getTime(),(admin.get('createdAt') as Date).getTime());
     await t.test('unauthenticated access, CSRF and incorrect role are rejected',async()=>{
       assert.equal((await request('/students')).status,401);
       assert.equal((await request('/auth/login','POST',{},'',{'X-Requested-With':''})).status,403);
@@ -146,6 +161,18 @@ test('SQLite API: authentication, authorization and full internship lifecycle', 
       assert.match((await request(`/reports/export?term=${encodeURIComponent(profile.term)}`)).data,/Test Student/);
       assert.equal((await request('/follow-ups','POST',{studentId:profile.id,note:'Reviewed final progress'})).status,201);
       assert.equal((await request('/follow-ups')).data.length,1);
+      const report=(await request(`/reports/export?term=${encodeURIComponent(profile.term)}`)).data as string;
+      assert.match(report,/"Section".*"Monitoring lists"/);assert.match(report,/"4A"/);assert.match(report,/"Completed"\r?$/m);
+    });
+    await t.test('adviser remarks are recorded by the coordinator and visible to the student',async()=>{
+      // The test student has no assigned adviser, so the adviser must be named.
+      assert.equal((await request('/adviser-remarks','POST',{studentId:profile.id,remark:'Good progress'})).status,400);
+      assert.equal((await request('/adviser-remarks','POST',{studentId:profile.id,remark:'Good progress',adviser:'Prof. Reyes'},studentCookie)).status,403);
+      const created=await request('/adviser-remarks','POST',{studentId:profile.id,remark:'Consistent weekly output',adviser:'Prof. Reyes'});
+      assert.equal(created.status,201,JSON.stringify(created.data));
+      assert.equal(created.data.adviser,'Prof. Reyes');assert.equal(created.data.recordedBy,'Test Admin');
+      assert.equal((await request(`/adviser-remarks?studentId=${profile.id}`,'GET',undefined,studentCookie)).data.length,1);
+      assert.equal((await request('/adviser-remarks?studentId=OTHER','GET',undefined,studentCookie)).status,403);
     });
     await t.test('concurrent placement and hour decisions remain consistent',async()=>{
       const otherProfile={...profile,id:'RACE-01',email:'race@example.edu',term:'2nd semester, AY 2031–2032'};
@@ -173,7 +200,8 @@ test('SQLite API: authentication, authorization and full internship lifecycle', 
     await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
     for(const file of uploadFiles) await unlink(path.join(config.uploadDir,file)).catch(()=>{});
     await db.close();
-    // Only the unique database created by this test can reach this cleanup statement.
-    for (const suffix of ['', '-journal', '-shm', '-wal']) await unlink(databaseFile + suffix).catch(() => {});
+    // Only the unique database created by this test can reach these cleanup statements.
+    if (dialect === 'mysql') await mysqlAdmin(`DROP DATABASE IF EXISTS \`${mysqlDatabase}\``);
+    else for (const suffix of ['', '-journal', '-shm', '-wal']) await unlink(databaseFile + suffix).catch(() => {});
   }
 });

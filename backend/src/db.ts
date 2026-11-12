@@ -85,8 +85,26 @@ export const schema002 = {
     },
   } as Record<string, ModelAttributes>,
 };
+// Migration 004: faculty adviser remarks on internship progress.
+export const schema004 = {
+  tables: {
+    adviser_remarks: {
+      id: pk(), studentId: studentRef(), adviser: text(150), remark: { type: DataTypes.TEXT, allowNull: false },
+      // The coordinator who recorded the remark; advisers have no accounts.
+      authorId: { ...ref('users'), allowNull: true, onDelete: 'SET NULL' }, ...timestamps(),
+    },
+  } as Record<string, ModelAttributes>,
+};
+/** True for date-time columns (not DATEONLY); Sequelize may already have replaced the type class with an instance. */
+export function isDateTime(options: unknown) {
+  const type = (options as { type?: unknown }).type;
+  return type === DataTypes.DATE || type instanceof DataTypes.DATE;
+}
 function model(table: string, extra: ModelAttributes = {}) {
-  return db.define<Model>(table, { ...(initialSchema[table] ?? schema002.tables[table]), ...extra }, { tableName: table });
+  const attributes = Object.entries({ ...(initialSchema[table] ?? schema002.tables[table] ?? schema004.tables[table]), ...extra }).map(([key, options]) =>
+    // Sequelize drops milliseconds on MySQL unless the type asks for them (columns widened by migration 003).
+    [key, isMySql && isDateTime(options) ? { ...(options as object), type: DataTypes.DATE(3) } : options]);
+  return db.define<Model>(table, Object.fromEntries(attributes), { tableName: table });
 }
 export const Student = model('students');
 export const User = model('users');
@@ -98,3 +116,4 @@ export const FollowUp = model('follow_ups');
 export const RecoveryRequest = model('recovery_requests');
 export const ApplicationEvent = model('application_events');
 export const DocumentReview = model('document_reviews');
+export const AdviserRemark = model('adviser_remarks');

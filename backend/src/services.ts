@@ -1,7 +1,7 @@
 import type { Transaction } from 'sequelize';
 import { Op } from 'sequelize';
-import { Application, ApplicationEvent, Document, DocumentReview, FollowUp, HourEntry, Student, User } from './db.js';
-import { requirements, internshipStatuses, type StudentDTO, type ApplicationDTO, type ApplicationEventDTO, type DocumentDTO, type DocumentEventDTO, type HourDTO, type DashboardDTO, type IssueDTO } from '../../shared/contracts.js';
+import { AdviserRemark, Application, ApplicationEvent, Document, DocumentReview, FollowUp, HourEntry, Student, User } from './db.js';
+import { requirements, internshipStatuses, type AdviserRemarkDTO, type StudentDTO, type ApplicationDTO, type ApplicationEventDTO, type DocumentDTO, type DocumentEventDTO, type HourDTO, type DashboardDTO, type IssueDTO } from '../../shared/contracts.js';
 import { HttpError } from './validation.js';
 
 export async function requireStudent(id: string, transaction?: Transaction) {
@@ -85,6 +85,16 @@ export async function documentRows(where: Record<string, unknown> = {}): Promise
 export async function hourRows(where: Record<string, unknown> = {}): Promise<HourDTO[]> {
   const [records, students] = await Promise.all([HourEntry.findAll({ where, order: [['date','DESC'],['id','DESC']] }), Student.findAll({ attributes: ['id','name'] })]);
   return records.map(h => ({ ...h.toJSON(), hours: Number(h.get('hours')), name: String(students.find(s => s.get('id') === h.get('studentId'))?.get('name') || '') })) as HourDTO[];
+}
+export async function adviserRemarkRows(where: Record<string, unknown> = {}): Promise<AdviserRemarkDTO[]> {
+  const records = await AdviserRemark.findAll({ where, order: [['createdAt','DESC'],['id','DESC']] });
+  const names = await userNames(records.map(r => r.get('authorId')));
+  return records.map(r => ({ id: r.get('id') as number, studentId: r.get('studentId') as string, adviser: r.get('adviser') as string,
+    remark: r.get('remark') as string, recordedBy: names.get(r.get('authorId')) || '', createdAt: iso(r.get('createdAt')) }));
+}
+/** The server's local calendar date as YYYY-MM-DD. */
+export function localToday(now = new Date()) {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 }
 export async function dashboard(term?: string): Promise<DashboardDTO> {
   const students = await studentProfiles(term ? { term } : {});

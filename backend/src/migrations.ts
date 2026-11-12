@@ -1,6 +1,6 @@
 import { DataTypes } from 'sequelize';
 import { config } from './config.js';
-import { db, initialSchema, schema002, runTransaction, Application, Document } from './db.js';
+import { db, initialSchema, schema002, schema004, runTransaction, isDateTime, Application, Document } from './db.js';
 
 const tableOptions = config.dbDialect === 'mysql' ? { charset: 'utf8mb4', collate: 'utf8mb4_unicode_ci' } : {};
 
@@ -49,5 +49,26 @@ export async function migrate() {
       if (documentReviews.length) await qi.bulkInsert('document_reviews', documentReviews, { transaction });
       await qi.bulkInsert('schema_migrations', [{ name: '002_history' }], { transaction });
     });
+  }
+  if (!await isApplied('003_datetime_precision')) {
+    // MySQL DATETIME keeps whole seconds by default; store milliseconds as SQLite does.
+    // MODIFY is repeatable, so an interrupted run can resume.
+    if (config.dbDialect === 'mysql') {
+      for (const [table, attributes] of Object.entries({ ...initialSchema, ...schema002.tables })) {
+        for (const [column, options] of Object.entries(attributes)) {
+          if (isDateTime(options)) await db.query(`ALTER TABLE \`${table}\` MODIFY \`${column}\` DATETIME(3) NOT NULL`);
+        }
+      }
+    }
+    await qi.bulkInsert('schema_migrations', [{ name: '003_datetime_precision' }]);
+  }
+  if (!await isApplied('004_adviser_remarks')) {
+    for (const [name, attributes] of Object.entries(schema004.tables)) {
+      // New tables keep millisecond timestamps on MySQL, matching migration 003.
+      const columns = Object.fromEntries(Object.entries(attributes).map(([key, options]) =>
+        [key, config.dbDialect === 'mysql' && isDateTime(options) ? { ...(options as object), type: DataTypes.DATE(3) } : options]));
+      if (!await qi.tableExists(name)) await qi.createTable(name, columns, tableOptions);
+    }
+    await qi.bulkInsert('schema_migrations', [{ name: '004_adviser_remarks' }]);
   }
 }

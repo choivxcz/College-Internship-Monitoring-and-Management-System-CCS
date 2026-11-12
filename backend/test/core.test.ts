@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { hashPassword, verifyPassword, tokenHash } from '../src/security.js';
 import { hourSchema, studentSchema } from '../src/validation.js';
 import { scope, csvCell } from '../src/services.js';
+import { monitoringCategoriesOf, expectedHoursToDate } from '../../shared/contracts.js';
 
 test('passwords use unique salts and reject wrong passwords', async () => {
   const first = await hashPassword('test-password-123');
@@ -36,6 +37,22 @@ test('student profile requires valid account and academic fields', () => {
   assert.equal(studentSchema.parse({...valid,term:'2nd semester, AY 2026-2027'}).term,'2nd semester, AY 2026–2027');
   for (const term of ['Summer, AY 2026–2027','3rd semester, AY 2026–2027','1st semester, AY 2026–2028','Test term']) assert.equal(studentSchema.safeParse({...valid,term}).success,false);
   assert.equal(studentSchema.safeParse({...valid,startDate:'2026-10-20',expectedCompletion:'2026-10-01'}).success,false);
+});
+test('monitoring lists classify students by stage, requirements and hours', () => {
+  const base = { status: 'Interning' as const, hoursDone: 100, requiredHours: 400, verifiedDocuments: 8, totalDocuments: 8, startDate: '2026-01-01', expectedCompletion: '2026-05-01' };
+  const today = '2026-03-02'; // Day 60 of a 120-day placement, so 200 hours are expected.
+  assert.equal(expectedHoursToDate(base, today), 200);
+  assert.deepEqual(monitoringCategoriesOf(base, today), ['Currently interning', 'Insufficient hours']);
+  assert.deepEqual(monitoringCategoriesOf({ ...base, hoursDone: 250 }, today), ['Currently interning']);
+  assert.deepEqual(monitoringCategoriesOf({ ...base, hoursDone: 330 }, today), ['Currently interning', 'Nearing completion']);
+  // Past the expected completion date with hours still owed.
+  assert.ok(monitoringCategoriesOf({ ...base, hoursDone: 390 }, '2026-06-01').includes('Insufficient hours'));
+  // Without both dates, pace cannot be judged.
+  assert.deepEqual(monitoringCategoriesOf({ ...base, startDate: '', expectedCompletion: '' }, today), ['Currently interning']);
+  assert.deepEqual(monitoringCategoriesOf({ ...base, status: 'Not applied', hoursDone: 0, verifiedDocuments: 0 }, today), ['Not applied', 'Incomplete requirements']);
+  assert.deepEqual(monitoringCategoriesOf({ ...base, status: 'Applying', verifiedDocuments: 3 }, today), ['Currently applying', 'Incomplete requirements']);
+  assert.deepEqual(monitoringCategoriesOf({ ...base, status: 'Completed', hoursDone: 400, verifiedDocuments: 7 }, today), ['Completed']);
+  assert.equal(expectedHoursToDate({ ...base, expectedCompletion: '2025-12-01' }, today), null);
 });
 test('CSV cells escape delimiters, quotes and spreadsheet formulas', () => {
   assert.equal(csvCell('A,"B"'), '"A,""B"""');
