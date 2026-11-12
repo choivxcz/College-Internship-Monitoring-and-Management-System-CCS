@@ -18,7 +18,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import type { ApplicationDTO, DocumentDTO, HourDTO, StudentDTO, UserDTO } from "../../../../shared/contracts";
+import type { AdviserRemarkDTO, ApplicationDTO, DocumentDTO, HourDTO, StudentDTO, UserDTO } from "../../../../shared/contracts";
 import { api, ApiError } from "../../services/api";
 import "./student-portal.css";
 import FilePreviewModal from "../../components/ui/FilePreviewModal";
@@ -57,6 +57,7 @@ export default function StudentPortalPage({ user, onLogout }: StudentPortalProps
   const [applications, setApplications] = useState<ApplicationDTO[]>([]);
   const [documents, setDocuments] = useState<DocumentDTO[]>([]);
   const [hours, setHours] = useState<HourDTO[]>([]);
+  const [remarks, setRemarks] = useState<AdviserRemarkDTO[]>([]);
   const [requirements, setRequirements] = useState<readonly string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -72,17 +73,19 @@ export default function StudentPortalPage({ user, onLogout }: StudentPortalProps
     }
     setLoading(true);
     try {
-      const [student, apps, docs, entries, reqs] = await Promise.all([
+      const [student, apps, docs, entries, reqs, adviserRemarks] = await Promise.all([
         api.student(studentId),
         api.applications({ studentId }),
         api.documents({ studentId }),
         api.hours({ studentId }),
         api.requirements(),
+        api.adviserRemarks({ studentId }),
       ]);
       setProfile(student);
       setApplications(apps);
       setDocuments(docs);
       setHours(entries);
+      setRemarks(adviserRemarks);
       setRequirements(reqs);
       setError("");
     } catch (caught) {
@@ -266,7 +269,7 @@ export default function StudentPortalPage({ user, onLogout }: StudentPortalProps
             )}
 
             {tab === "hours" && (
-              <HoursTab studentId={studentId} hours={hours} isInterning={isInterning} approvedHours={approvedHours} requiredHours={requiredHours} onSaved={(text) => { notify("success", text); void load(); }} onError={(text) => notify("error", text)} />
+              <HoursTab studentId={studentId} hours={hours} remarks={remarks} isInterning={isInterning} approvedHours={approvedHours} requiredHours={requiredHours} onSaved={(text) => { notify("success", text); void load(); }} onError={(text) => notify("error", text)} />
             )}
 
             {tab === "profile" && (
@@ -433,7 +436,7 @@ function DocumentsTab({ studentId, requirements, documents, onSaved, onError }: 
   );
 }
 
-function HoursTab({ studentId, hours, isInterning, approvedHours, requiredHours, onSaved, onError }: TabCallbacks & { studentId: string; hours: HourDTO[]; isInterning: boolean; approvedHours: number; requiredHours: number }) {
+function HoursTab({ studentId, hours, remarks, isInterning, approvedHours, requiredHours, onSaved, onError }: TabCallbacks & { studentId: string; hours: HourDTO[]; remarks: AdviserRemarkDTO[]; isInterning: boolean; approvedHours: number; requiredHours: number }) {
   const [form, setForm] = useState({ date: todayIso(), hours: "8", description: "" });
   const [saving, setSaving] = useState(false);
 
@@ -489,6 +492,19 @@ function HoursTab({ studentId, hours, isInterning, approvedHours, requiredHours,
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="sp-card">
+        <div className="sp-card-heading"><div><h2>Adviser remarks</h2><p>Feedback from your faculty adviser on your progress.</p></div><span>{remarks.length} remark{remarks.length === 1 ? "" : "s"}</span></div>
+        <ul className="sp-remark-list">
+          {remarks.map((item) => (
+            <li key={item.id}>
+              <p>{item.remark}</p>
+              <small>{item.adviser} · {dateLabel(item.createdAt)}</small>
+            </li>
+          ))}
+          {!remarks.length && <li className="sp-empty">No adviser remarks yet.</li>}
+        </ul>
       </section>
     </>
   );

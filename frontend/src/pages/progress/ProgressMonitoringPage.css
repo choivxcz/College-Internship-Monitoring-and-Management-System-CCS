@@ -1152,6 +1152,128 @@
   to { opacity: 1; }
 }
 
+.progress-attendance-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.progress-attendance-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #eef1f6;
+  border-radius: 7px;
+  background: #fbfbfd;
+}
+
+.progress-attendance-summary span {
+  color: #8b97ad;
+  font-size: 8px;
+}
+
+.progress-attendance-summary strong {
+  color: #2d3b55;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.progress-accomplishment-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.progress-accomplishment-items li {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 6px;
+  color: #4a566d;
+  font-size: 8.5px;
+  line-height: 1.55;
+}
+
+.progress-accomplishment-items time {
+  color: #8b97ad;
+  white-space: nowrap;
+}
+
+.progress-accomplishment-items span {
+  overflow-wrap: anywhere;
+}
+
+.progress-adviser-card {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 10px;
+}
+
+.progress-adviser-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, .85fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.progress-adviser-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.progress-adviser-remark {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid #e3e0fb;
+  border-radius: 7px;
+  background: #f8f7ff;
+  color: #5b50e7;
+}
+
+.progress-adviser-remark > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.progress-adviser-remark p {
+  margin: 0 0 3px;
+  color: #35415a;
+  font-size: 9px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.progress-adviser-remark small {
+  color: #8b97ad;
+  font-size: 8px;
+}
+
+.progress-adviser-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.progress-adviser-form .progress-form-field textarea {
+  min-height: 70px;
+}
+
+.progress-adviser-form .progress-primary-button {
+  align-self: flex-end;
+}
+
 @keyframes progressModalIn {
   from { opacity: 0; transform: translateY(10px) scale(.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -1183,7 +1305,8 @@
 }
 
 @media (max-width: 1080px) {
-  .progress-week-grid {
+  .progress-week-grid,
+  .progress-adviser-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -1254,6 +1377,10 @@
 @media (max-width: 540px) {
   .progress-filter-bar {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .progress-attendance-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .progress-search-box,

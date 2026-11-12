@@ -12,12 +12,14 @@ import {
   FileSpreadsheet,
   FileText,
   Flag,
+  ListChecks,
   MessageSquarePlus,
   Search,
   TriangleAlert,
+  Users,
   X,
 } from "lucide-react";
-import type { DocumentDTO, FollowUpDTO, HourDTO, StudentDTO } from "../../../../shared/contracts";
+import { monitoringCategories, monitoringCategoriesOf, nearingCompletionShare, type DocumentDTO, type FollowUpDTO, type HourDTO, type MonitoringCategory, type StudentDTO } from "../../../../shared/contracts";
 import { api, ApiError } from "../../services/api";
 import "./MonitoringReportsPage.css";
 
@@ -37,6 +39,33 @@ const readinessTone: Record<Readiness, string> = {
 };
 
 const PAGE_SIZE = 8;
+
+const categoryDetail: Record<MonitoringCategory, string> = {
+  "Not applied": "No application recorded yet",
+  "Currently applying": "Applications awaiting a decision",
+  Accepted: "Accepted, internship not yet started",
+  "Currently interning": "Placement in progress",
+  "Incomplete requirements": "Not all requirements verified",
+  "Insufficient hours": "Approved hours behind the schedule",
+  "Nearing completion": `At least ${nearingCompletionShare * 100}% of required hours`,
+  Completed: "Internship completed",
+};
+const categoryTone: Record<MonitoringCategory, string> = {
+  "Not applied": "idle",
+  "Currently applying": "progress",
+  Accepted: "ready",
+  "Currently interning": "progress",
+  "Incomplete requirements": "docs",
+  "Insufficient hours": "behind",
+  "Nearing completion": "ready",
+  Completed: "done",
+};
+/** Lists shown as flags in the register; the stage lists are already visible as the status. */
+const flagCategories: MonitoringCategory[] = ["Incomplete requirements", "Insufficient hours", "Nearing completion"];
+const localToday = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
 
 function readinessOf(student: StudentDTO): Readiness {
   if (student.status === "Completed") return "Completed";
@@ -77,6 +106,8 @@ export default function MonitoringReportsPage() {
   const [query, setQuery] = useState("");
   const [program, setProgram] = useState("All programs");
   const [readiness, setReadiness] = useState<"All readiness" | Readiness>("All readiness");
+  const [section, setSection] = useState("All sections");
+  const [category, setCategory] = useState<"All lists" | MonitoringCategory>("All lists");
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState("");
   const [detailsSwitching, setDetailsSwitching] = useState(false);
@@ -125,15 +156,48 @@ export default function MonitoringReportsPage() {
 
   const programs = useMemo(() => [...new Set(students.map((student) => student.program).filter(Boolean))].sort(), [students]);
 
-  const rows = useMemo(() => students.map((student) => ({ student, readiness: readinessOf(student) })), [students]);
+  const sections = useMemo(
+    () => [...new Set(students.filter((student) => program === "All programs" || student.program === program).map((student) => student.section).filter(Boolean))].sort(),
+    [students, program]
+  );
+
+  const rows = useMemo(() => {
+    const today = localToday();
+    return students.map((student) => ({ student, readiness: readinessOf(student), categories: monitoringCategoriesOf(student, today) }));
+  }, [students]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return rows.filter(({ student, readiness: state }) =>
+    return rows.filter(({ student, readiness: state, categories }) =>
       (!normalized || `${student.name} ${student.id} ${student.organization}`.toLowerCase().includes(normalized))
       && (program === "All programs" || student.program === program)
-      && (readiness === "All readiness" || state === readiness));
-  }, [rows, query, program, readiness]);
+      && (section === "All sections" || student.section === section)
+      && (readiness === "All readiness" || state === readiness)
+      && (category === "All lists" || categories.includes(category)));
+  }, [rows, query, program, section, readiness, category]);
+
+  const categoryCounts = useMemo(() => {
+    const result = Object.fromEntries(monitoringCategories.map((option) => [option, 0])) as Record<MonitoringCategory, number>;
+    for (const row of rows) for (const item of row.categories) result[item] += 1;
+    return result;
+  }, [rows]);
+
+  // One row per program and section, with a program total when a program has several sections.
+  const sectionReport = useMemo(() => {
+    const tally = (group: typeof rows) => ({
+      students: group.length,
+      counts: Object.fromEntries(monitoringCategories.map((option) => [option, group.filter((row) => row.categories.includes(option)).length])) as Record<MonitoringCategory, number>,
+    });
+    return programs.map((name) => {
+      const programRows = rows.filter((row) => row.student.program === name);
+      const sectionNames = [...new Set(programRows.map((row) => row.student.section))].sort();
+      return {
+        program: name,
+        total: tally(programRows),
+        sections: sectionNames.map((value) => ({ section: value, ...tally(programRows.filter((row) => row.student.section === value)) })),
+      };
+    });
+  }, [programs, rows]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages);
@@ -209,8 +273,47 @@ export default function MonitoringReportsPage() {
   function resetFilters() {
     setQuery("");
     setProgram("All programs");
+    setSection("All sections");
+    setReadiness("All readiness");
+    setCategory("All lists");
+    setPage(1);
+  }
+
+  function focusCategory(value: MonitoringCategory) {
+    setCategory(value);
     setReadiness("All readiness");
     setPage(1);
+    const target = rows.find((row) => row.categories.includes(value) && (program === "All programs" || row.student.program === program) && (section === "All sections" || row.student.section === section));
+    if (target) selectStudent(target.student.id);
+    notify(value, `${categoryCounts[value]} student${categoryCounts[value] === 1 ? "" : "s"} on this list.`);
+  }
+
+  function focusSection(programName: string, sectionName?: string) {
+    setProgram(programName);
+    setSection(sectionName ?? "All sections");
+    setPage(1);
+  }
+
+  function exportSectionReport() {
+    const header = ["Program", "Section", "Students", ...monitoringCategories];
+    const lines: (string | number)[][] = [];
+    for (const item of sectionReport) {
+      for (const row of item.sections) lines.push([item.program, row.section, row.students, ...monitoringCategories.map((option) => row.counts[option])]);
+      lines.push([item.program, "All sections", item.total.students, ...monitoringCategories.map((option) => item.total.counts[option])]);
+    }
+    downloadCsv("program-section-report.csv", [header, ...lines]);
+    notify("Program and section report exported", `${sectionReport.length} program${sectionReport.length === 1 ? "" : "s"} included in the CSV.`, "success");
+  }
+
+  function exportMonitoringLists() {
+    const lines: (string | number)[][] = [];
+    for (const option of monitoringCategories) {
+      for (const { student } of rows.filter((row) => row.categories.includes(option))) {
+        lines.push([option, student.id, student.name, student.program, student.section, student.status, student.organization, student.hoursDone, student.requiredHours, student.verifiedDocuments, student.totalDocuments, student.expectedCompletion]);
+      }
+    }
+    downloadCsv("monitoring-lists.csv", [["List", "Student ID", "Name", "Program", "Section", "Status", "Organization", "Approved hours", "Required hours", "Verified documents", "Required documents", "Expected completion"], ...lines]);
+    notify("Monitoring lists exported", `${lines.length} list entries included in the CSV.`, "success");
   }
 
   function focusReadiness(value: Readiness) {
@@ -258,8 +361,8 @@ export default function MonitoringReportsPage() {
 
   function exportRegister() {
     downloadCsv("completion-register.csv", [
-      ["Student ID", "Name", "Program", "Section", "Status", "Organization", "Approved hours", "Required hours", "Verified documents", "Required documents", "Readiness"],
-      ...filtered.map(({ student, readiness: state }) => [student.id, student.name, student.program, student.section, student.status, student.organization, student.hoursDone, student.requiredHours, student.verifiedDocuments, student.totalDocuments, state]),
+      ["Student ID", "Name", "Program", "Section", "Status", "Organization", "Approved hours", "Required hours", "Verified documents", "Required documents", "Readiness", "Monitoring lists"],
+      ...filtered.map(({ student, readiness: state, categories }) => [student.id, student.name, student.program, student.section, student.status, student.organization, student.hoursDone, student.requiredHours, student.verifiedDocuments, student.totalDocuments, state, categories.join("; ")]),
     ]);
     notify("Completion register exported", `${filtered.length} filtered records included in the CSV.`, "success");
   }
@@ -284,6 +387,8 @@ export default function MonitoringReportsPage() {
   const reports = [
     { title: "Internship progress report", detail: "Status, approved hours and verified documents per student", icon: FileSpreadsheet, action: () => void exportProgressReport(), busy: exporting },
     { title: "Completion register", detail: `Current filtered view · ${filtered.length} students with readiness`, icon: ClipboardCheck, action: exportRegister, busy: false },
+    { title: "Monitoring lists", detail: "Every student on each monitoring list", icon: ListChecks, action: exportMonitoringLists, busy: false },
+    { title: "Program and section report", detail: "Monitoring list counts per program and section", icon: Users, action: exportSectionReport, busy: false },
     { title: "Program summary", detail: "Hours and document completion by program", icon: Activity, action: exportProgramSummary, busy: false },
     { title: "Follow-up log", detail: `${followUps.length} coordinator notes across the cohort`, icon: FileText, action: exportFollowUps, busy: false },
   ];
@@ -314,6 +419,22 @@ export default function MonitoringReportsPage() {
         })}
       </section>
 
+      <section className="panel reports-lists-card" aria-label="Monitoring lists">
+        <div className="reports-card-heading">
+          <div><h2>Monitoring lists</h2><p>Select a list to show its students in the register below. A student can be on several lists.</p></div>
+          <button className="reports-card-link" type="button" onClick={exportMonitoringLists} disabled={!students.length}>Export lists <Download size={11} /></button>
+        </div>
+        <div className="reports-lists-grid">
+          {monitoringCategories.map((option) => (
+            <button key={option} type="button" className={`reports-list-tile list-${categoryTone[option]} ${category === option ? "is-active" : ""}`} onClick={() => (category === option ? (setCategory("All lists"), setPage(1)) : focusCategory(option))} aria-pressed={category === option}>
+              <span>{option}</span>
+              <strong>{loading && !students.length ? "—" : categoryCounts[option]}</strong>
+              <small>{categoryDetail[option]}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+
       {loadError && (
         <div className="reports-alert">
           <TriangleAlert size={15} />
@@ -329,9 +450,23 @@ export default function MonitoringReportsPage() {
           {query && <button type="button" aria-label="Clear search" onClick={() => { setQuery(""); setPage(1); }}><X size={13} /></button>}
         </label>
         <label className="reports-select-wrap">
-          <select value={program} onChange={(event) => { setProgram(event.target.value); setPage(1); }} aria-label="Filter by program">
+          <select value={program} onChange={(event) => { setProgram(event.target.value); setSection("All sections"); setPage(1); }} aria-label="Filter by program">
             <option>All programs</option>
             {programs.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <ChevronDown size={12} />
+        </label>
+        <label className="reports-select-wrap">
+          <select value={section} onChange={(event) => { setSection(event.target.value); setPage(1); }} aria-label="Filter by section">
+            <option>All sections</option>
+            {sections.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <ChevronDown size={12} />
+        </label>
+        <label className="reports-select-wrap reports-readiness-select">
+          <select value={category} onChange={(event) => { setCategory(event.target.value as typeof category); setPage(1); }} aria-label="Filter by monitoring list">
+            <option>All lists</option>
+            {monitoringCategories.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
           <ChevronDown size={12} />
         </label>
@@ -355,9 +490,10 @@ export default function MonitoringReportsPage() {
           </div>
           <div className="reports-table-wrap">
             <table className="reports-table">
-              <thead><tr><th>Student</th><th>Approved hours</th><th>Documents</th><th>Readiness</th><th>Action</th></tr></thead>
+              <thead><tr><th>Student</th><th>Approved hours</th><th>Documents</th><th>Readiness</th><th>Flags</th><th>Action</th></tr></thead>
               <tbody>
-                {shown.map(({ student, readiness: state }) => {
+                {shown.map(({ student, readiness: state, categories }) => {
+                  const flags = categories.filter((item) => flagCategories.includes(item));
                   const hoursPercent = percent(student.hoursDone, student.requiredHours);
                   return (
                     <tr key={student.id} className={student.id === selected?.id ? "is-selected" : ""} onClick={() => selectStudent(student.id)}>
@@ -376,6 +512,12 @@ export default function MonitoringReportsPage() {
                       <td><span className="reports-doc-count">{student.verifiedDocuments}/{student.totalDocuments}</span></td>
                       <td><span className={`reports-pill readiness-${readinessTone[state]}`}>{state}</span></td>
                       <td>
+                        <span className="reports-flag-list">
+                          {flags.map((item) => <span key={item} className={`reports-flag list-${categoryTone[item]}`}>{item}</span>)}
+                          {!flags.length && <span className="reports-flag-none">—</span>}
+                        </span>
+                      </td>
+                      <td>
                         <button className="reports-table-action" type="button" onClick={(event) => { event.stopPropagation(); selectStudent(student.id); }}>
                           {student.id === selected?.id ? "Viewing" : "View report"} <ArrowUpRight size={10} />
                         </button>
@@ -385,7 +527,7 @@ export default function MonitoringReportsPage() {
                 })}
                 {!shown.length && (
                   <tr>
-                    <td colSpan={5} className="reports-empty-cell">
+                    <td colSpan={6} className="reports-empty-cell">
                       {loading ? "Loading students…" : students.length ? <>No students match these filters. <button className="reports-card-link" type="button" onClick={resetFilters}>Clear filters</button></> : "No student profiles yet."}
                     </td>
                   </tr>
@@ -515,6 +657,41 @@ export default function MonitoringReportsPage() {
         !loading && <div className="reports-empty-state">No students found. Add a student profile to begin monitoring.</div>
       )}
 
+      <section className="panel reports-section-card">
+        <div className="reports-card-heading">
+          <div><h2>Report by program and section</h2><p>Students on each monitoring list, per program and section · select a row to filter the register</p></div>
+          <button className="reports-card-link" type="button" onClick={exportSectionReport} disabled={!sectionReport.length}>Export <Download size={11} /></button>
+        </div>
+        <div className="reports-table-wrap">
+          <table className="reports-table reports-section-table">
+            <thead>
+              <tr>
+                <th>Program · section</th>
+                <th>Students</th>
+                {monitoringCategories.map((option) => <th key={option}>{option}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {sectionReport.map((item) => [
+                ...item.sections.map((row) => (
+                  <tr key={`${item.program}-${row.section}`} className={program === item.program && section === row.section ? "is-selected" : ""} onClick={() => focusSection(item.program, row.section)}>
+                    <td><strong className="reports-program-name">{item.program} {row.section}</strong></td>
+                    <td>{row.students}</td>
+                    {monitoringCategories.map((option) => <td key={option} className={row.counts[option] ? "" : "reports-zero"}>{row.counts[option]}</td>)}
+                  </tr>
+                )),
+                <tr key={`${item.program}-total`} className={`reports-total-row ${program === item.program && section === "All sections" ? "is-selected" : ""}`} onClick={() => focusSection(item.program)}>
+                  <td><strong className="reports-program-name">{item.program} total</strong></td>
+                  <td>{item.total.students}</td>
+                  {monitoringCategories.map((option) => <td key={option} className={item.total.counts[option] ? "" : "reports-zero"}>{item.total.counts[option]}</td>)}
+                </tr>,
+              ])}
+              {!sectionReport.length && <tr><td colSpan={monitoringCategories.length + 2} className="reports-empty-cell">{loading ? "Loading programs…" : "No programs to report yet."}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <div className="reports-bottom-grid">
         <section className="panel reports-program-card">
           <div className="reports-card-heading">
@@ -526,7 +703,7 @@ export default function MonitoringReportsPage() {
               <thead><tr><th>Program</th><th>Students</th><th>Interning</th><th>Completed</th><th>Hours</th><th>Documents</th></tr></thead>
               <tbody>
                 {programSummary.map((item) => (
-                  <tr key={item.name} onClick={() => { setProgram(item.name); setPage(1); }}>
+                  <tr key={item.name} onClick={() => focusSection(item.name)}>
                     <td><strong className="reports-program-name">{item.name}</strong></td>
                     <td>{item.students}</td>
                     <td>{item.interning}</td>

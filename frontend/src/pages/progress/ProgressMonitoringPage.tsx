@@ -5,11 +5,12 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock3,
+  MessageSquareText,
   Plus,
   Search,
   X,
 } from "lucide-react";
-import type { HourDTO, StudentDTO } from "../../../../shared/contracts";
+import type { AdviserRemarkDTO, HourDTO, StudentDTO } from "../../../../shared/contracts";
 import { api, ApiError } from "../../services/api";
 import "./ProgressMonitoringPage.css";
 import ModalPortal from "../../components/ui/ModalPortal";
@@ -46,15 +47,20 @@ export default function ProgressMonitoringPage() {
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [entryForm, setEntryForm] = useState<EntryForm>({ studentId: "", date: todayIso(), hours: "8", description: "" });
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [remarks, setRemarks] = useState<AdviserRemarkDTO[]>([]);
+  const [remarkText, setRemarkText] = useState("");
+  const [remarkAdviser, setRemarkAdviser] = useState("");
+  const [savingRemark, setSavingRemark] = useState(false);
   const switchTimer = useRef<number | undefined>(undefined);
   const toastTimer = useRef<number | undefined>(undefined);
 
   async function load(preferredId?: string) {
     setLoading(true);
     try {
-      const [studentRows, hourRows] = await Promise.all([api.students(), api.hours()]);
+      const [studentRows, hourRows, remarkRows] = await Promise.all([api.students(), api.hours(), api.adviserRemarks()]);
       setStudents(studentRows);
       setHours(hourRows);
+      setRemarks(remarkRows);
       setSelectedStudentId((current) => preferredId || (studentRows.some((student) => student.id === current) ? current : studentRows[0]?.id ?? ""));
       setLoadError("");
     } catch (error) {
@@ -88,9 +94,25 @@ export default function ProgressMonitoringPage() {
       && (program === "All programs" || student.program === program));
   }, [students, query, program]);
 
-  const weeklyTotals = useMemo(() => {
+  // Attendance counts each logged day once; rejected entries do not count as attendance.
+  const attendance = useMemo(() => {
+    const attended = studentHours.filter((entry) => entry.status !== "Rejected");
+    const days = new Set(attended.map((entry) => entry.date));
+    const approvedDays = new Set(studentHours.filter((entry) => entry.status === "Approved").map((entry) => entry.date));
+    const last = [...days].sort().pop();
+    return {
+      days: days.size,
+      approvedDays: approvedDays.size,
+      averagePerDay: approvedDays.size ? Math.round((approvedHours / approvedDays.size) * 10) / 10 : 0,
+      last,
+    };
+  }, [studentHours, approvedHours]);
+
+  // Each week lists what was accomplished, taken from the work summaries of that week's entries.
+  const weeklyAccomplishments = useMemo(() => {
     const groups = new Map<string, HourDTO[]>();
     for (const entry of studentHours) {
+      if (entry.status === "Rejected") continue;
       const key = weekKey(entry.date);
       groups.set(key, [...(groups.get(key) ?? []), entry]);
     }
@@ -99,11 +121,33 @@ export default function ProgressMonitoringPage() {
       .slice(0, 6)
       .map(([week, entries]) => ({
         week,
-        entries: entries.length,
+        days: new Set(entries.map((entry) => entry.date)).size,
         approved: entries.filter((entry) => entry.status === "Approved").reduce((sum, entry) => sum + entry.hours, 0),
         pending: entries.filter((entry) => entry.status === "Pending").length,
+        accomplishments: [...entries].sort((a, b) => a.date.localeCompare(b.date)).map((entry) => ({ id: entry.id, date: entry.date, text: entry.description })),
       }));
   }, [studentHours]);
+
+  const studentRemarks = useMemo(
+    () => remarks.filter((item) => item.studentId === selectedStudent?.id),
+    [remarks, selectedStudent?.id]
+  );
+
+  async function saveRemark(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedStudent || !remarkText.trim()) return;
+    setSavingRemark(true);
+    try {
+      const created = await api.createAdviserRemark({ studentId: selectedStudent.id, remark: remarkText.trim(), adviser: remarkAdviser.trim() || undefined });
+      setRemarks((current) => [created, ...current]);
+      setRemarkText("");
+      notify("Adviser remark recorded", `${created.adviser} · ${selectedStudent.name}`, "success");
+    } catch (error) {
+      notify("Remark could not be saved", error instanceof ApiError ? error.message : "Please try again.");
+    } finally {
+      setSavingRemark(false);
+    }
+  }
 
   const behindPlan = students.filter((student) => ["Interning", "Accepted"].includes(student.status) && student.hoursDone < student.requiredHours * 0.5).length;
 
@@ -117,6 +161,8 @@ export default function ProgressMonitoringPage() {
     if (switchTimer.current !== undefined) window.clearTimeout(switchTimer.current);
     setDetailsSwitching(false);
     setSelectedStudentId(studentId);
+    setRemarkText("");
+    setRemarkAdviser("");
     switchTimer.current = window.setTimeout(() => { setDetailsSwitching(true); switchTimer.current = undefined; }, 25);
   }
 
@@ -288,8 +334,14 @@ export default function ProgressMonitoringPage() {
           <div className="progress-week-grid">
             <section className="panel progress-attendance-card">
               <div className="progress-card-heading">
-                <div><h2>Hour entries</h2><p>Every logged day for {selectedStudent.name.split(/\s+/)[0]}</p></div>
+                <div><h2>Attendance and hour log</h2><p>Every logged day for {selectedStudent.name.split(/\s+/)[0]}</p></div>
                 <button className="progress-card-link" type="button" onClick={exportLog}>Export log <ArrowUpRight size={11} /></button>
+              </div>
+              <div className="progress-attendance-summary" aria-label="Attendance summary">
+                <div><span>Days present</span><strong>{attendance.days}</strong></div>
+                <div><span>Approved days</span><strong>{attendance.approvedDays}</strong></div>
+                <div><span>Average per approved day</span><strong>{attendance.averagePerDay} h</strong></div>
+                <div><span>Last attended</span><strong>{attendance.last ? formatDate(attendance.last) : "—"}</strong></div>
               </div>
               <div className="progress-attendance-table-wrap">
                 <table className="progress-attendance-table">
@@ -320,23 +372,65 @@ export default function ProgressMonitoringPage() {
 
             <section className="panel progress-accomplishments-card">
               <div className="progress-card-heading">
-                <div><h2>Weekly totals</h2><p>Approved and pending hours by week</p></div>
+                <div><h2>Weekly accomplishments</h2><p>Work completed each week, from the daily work summaries</p></div>
                 <button className="progress-card-link" type="button" onClick={() => void load()} disabled={loading}>Refresh <ArrowUpRight size={11} /></button>
               </div>
               <div className="progress-accomplishment-list">
-                {weeklyTotals.map((week) => (
+                {weeklyAccomplishments.map((week) => (
                   <article className="progress-accomplishment" key={week.week}>
                     <div className="progress-accomplishment-heading">
                       <strong>Week of {formatDate(week.week)}</strong>
                       <span className="progress-approved-pill">{week.approved} h approved</span>
                     </div>
-                    <p>{week.entries} entr{week.entries === 1 ? "y" : "ies"} logged{week.pending ? ` · ${week.pending} awaiting review` : ""}.</p>
+                    <p>{week.days} day{week.days === 1 ? "" : "s"} attended{week.pending ? ` · ${week.pending} entr${week.pending === 1 ? "y" : "ies"} awaiting review` : ""}</p>
+                    <ul className="progress-accomplishment-items">
+                      {week.accomplishments.map((item) => (
+                        <li key={item.id}><time dateTime={item.date}>{formatDate(item.date).slice(0, 6)}</time><span>{item.text}</span></li>
+                      ))}
+                    </ul>
                   </article>
                 ))}
-                {!weeklyTotals.length && <div className="progress-empty-state">No weekly totals are available yet.</div>}
+                {!weeklyAccomplishments.length && <div className="progress-empty-state">No accomplishments recorded yet. They come from the work summary of each hour entry.</div>}
               </div>
             </section>
           </div>
+
+          <section className="panel progress-adviser-card">
+            <div className="progress-card-heading">
+              <div>
+                <h2>Adviser remarks</h2>
+                <p>Faculty adviser feedback on {selectedStudent.name.split(/\s+/)[0]}'s progress · assigned adviser: {selectedStudent.adviser || "not assigned"}</p>
+              </div>
+            </div>
+            <div className="progress-adviser-layout">
+              <div className="progress-adviser-list">
+                {studentRemarks.map((item) => (
+                  <article className="progress-adviser-remark" key={item.id}>
+                    <MessageSquareText size={14} />
+                    <div>
+                      <p>{item.remark}</p>
+                      <small>{item.adviser} · {formatDate(isoDate(new Date(item.createdAt)))}{item.recordedBy ? ` · recorded by ${item.recordedBy}` : ""}</small>
+                    </div>
+                  </article>
+                ))}
+                {!studentRemarks.length && <div className="progress-empty-state">No adviser remarks recorded for this student yet.</div>}
+              </div>
+              <form className="progress-adviser-form" onSubmit={saveRemark}>
+                <label className="progress-form-field">
+                  <span>Adviser</span>
+                  <input value={remarkAdviser} maxLength={150} onChange={(event) => setRemarkAdviser(event.target.value)} placeholder={selectedStudent.adviser || "Name of the faculty adviser"} required={!selectedStudent.adviser} />
+                </label>
+                <label className="progress-form-field">
+                  <span>Remark</span>
+                  <textarea rows={3} maxLength={2000} value={remarkText} onChange={(event) => setRemarkText(event.target.value)} placeholder="e.g. Shows steady improvement in documentation; complete the weekly log on time." />
+                </label>
+                <button className="progress-primary-button" type="submit" disabled={savingRemark || !remarkText.trim()}>
+                  <MessageSquareText size={13} />
+                  {savingRemark ? "Saving…" : "Record remark"}
+                </button>
+              </form>
+            </div>
+          </section>
         </div>
       ) : (
         <div className="progress-empty-state">{loading ? "Loading students…" : "No students found. Add a student profile to begin monitoring progress."}</div>

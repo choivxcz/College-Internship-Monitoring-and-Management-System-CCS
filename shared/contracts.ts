@@ -41,6 +41,43 @@ export interface HourDTO {
   status: 'Pending' | 'Approved' | 'Rejected';
 }
 export interface FollowUpDTO { id: number; studentId: string; note: string; createdAt: string }
+/** A faculty adviser's remark on a student's progress, recorded by the coordinator (advisers have no accounts). */
+export interface AdviserRemarkDTO { id: number; studentId: string; adviser: string; remark: string; recordedBy: string; createdAt: string }
+
+/** The monitoring lists in Monitoring and Reports; one student can appear in several. */
+export const monitoringCategories = [
+  'Not applied', 'Currently applying', 'Accepted', 'Currently interning',
+  'Incomplete requirements', 'Insufficient hours', 'Nearing completion', 'Completed',
+] as const;
+export type MonitoringCategory = typeof monitoringCategories[number];
+/** Share of the required hours at which an intern is listed as nearing completion. */
+export const nearingCompletionShare = 0.8;
+type MonitoredStudent = Pick<StudentDTO, 'status' | 'hoursDone' | 'requiredHours' | 'verifiedDocuments' | 'totalDocuments' | 'startDate' | 'expectedCompletion'>;
+const dayMs = 24 * 60 * 60 * 1000;
+const dayNumber = (iso: string) => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))) / dayMs;
+/** Hours that should be approved by `today`, pro-rated from start date to expected completion; null without both dates. */
+export function expectedHoursToDate(student: MonitoredStudent, today: string): number | null {
+  if (!student.startDate || !student.expectedCompletion) return null;
+  const start = dayNumber(student.startDate), end = dayNumber(student.expectedCompletion), now = dayNumber(today);
+  if (!(end > start)) return null;
+  return Math.round(student.requiredHours * Math.min(1, Math.max(0, (now - start) / (end - start))) * 100) / 100;
+}
+/** `today` is a local YYYY-MM-DD date. */
+export function monitoringCategoriesOf(student: MonitoredStudent, today: string): MonitoringCategory[] {
+  const result: MonitoringCategory[] = [];
+  const stage: Record<InternshipStatus, MonitoringCategory> = {
+    'Not applied': 'Not applied', Applying: 'Currently applying', Accepted: 'Accepted', Interning: 'Currently interning', Completed: 'Completed',
+  };
+  result.push(stage[student.status]);
+  if (student.status !== 'Completed' && student.verifiedDocuments < student.totalDocuments) result.push('Incomplete requirements');
+  if (['Accepted', 'Interning'].includes(student.status) && student.hoursDone < student.requiredHours) {
+    const expected = expectedHoursToDate(student, today);
+    const overdue = Boolean(student.expectedCompletion && student.expectedCompletion < today);
+    if (overdue || (expected !== null && student.hoursDone < expected)) result.push('Insufficient hours');
+  }
+  if (student.status === 'Interning' && student.requiredHours > 0 && student.hoursDone >= student.requiredHours * nearingCompletionShare) result.push('Nearing completion');
+  return result;
+}
 export interface IssueDTO {
   id: string; name: string; initials: string; program: string; issue: string;
   type: 'red' | 'orange' | 'blue'; adviser: string; action: string; followed: boolean;

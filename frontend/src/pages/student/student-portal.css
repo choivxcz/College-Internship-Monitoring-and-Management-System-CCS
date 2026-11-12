@@ -748,6 +748,36 @@
   cursor: pointer;
 }
 
+/* ---------- Adviser remarks ---------- */
+.sp-remark-list {
+  margin: 0;
+  padding: 8px 20px 14px;
+  list-style: none;
+}
+
+.sp-remark-list li {
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f3f8;
+}
+
+.sp-remark-list li:last-child {
+  border-bottom: 0;
+}
+
+.sp-remark-list p {
+  margin: 0 0 4px;
+  color: #40546e;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.sp-remark-list small {
+  color: #8798ad;
+  font-size: 11px;
+}
+
 /* ---------- Requirements checklist ---------- */
 .sp-requirements {
   margin: 0;

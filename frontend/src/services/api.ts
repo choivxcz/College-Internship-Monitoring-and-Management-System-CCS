@@ -1,4 +1,5 @@
 import type {
+  AdviserRemarkDTO,
   ApplicationDTO,
   DashboardDTO,
   DocumentDTO,
@@ -206,6 +207,12 @@ export const api = {
   followUps: () => request<FollowUpDTO[]>("/follow-ups"),
   createFollowUp: (input: { studentId: string; note: string }) =>
     request<FollowUpDTO>("/follow-ups", { method: "POST", body: JSON.stringify(input) }),
+
+  adviserRemarks: (params: { studentId?: string } = {}) =>
+    request<AdviserRemarkDTO[]>(`/adviser-remarks${query(params)}`),
+  /** `adviser` defaults to the student's assigned adviser on the server. */
+  createAdviserRemark: (input: { studentId: string; remark: string; adviser?: string }) =>
+    request<AdviserRemarkDTO>("/adviser-remarks", { method: "POST", body: JSON.stringify(input) }),
 
   reportExportUrl: (term?: string) => `${API_BASE}/reports/export${query({ term })}`,
 };
